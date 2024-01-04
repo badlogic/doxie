@@ -1,0 +1,182 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Light theme variables */
+:root {
+    --background: #ffffff;
+    --accent: #2563eb;
+    --accent-dark: #1e40af;
+    --primary: #cc7d24;
+    --primary-dark: #9c601c;
+    --primary-fg: #f3f4f6;
+    --secondary: #eaebed;
+    --secondary-fg: #111827;
+    --hinted: #f3f4f6;
+    --hinted-fg: #111827;
+    --muted: #f3f4f6;
+    --muted-fg: #6b7280;
+    --input: #e5e7eb;
+    --divider: #d1d5db;
+}
+
+/* Dark theme variables */
+.dark {
+    --background: #111111;
+    --accent: #3b82f6;
+    --accent-dark: #1e40af;
+    --primary: #cc7d24;
+    --primary-dark: #9c601c;
+    --primary-fg: #f3f4f6;
+    --secondary: #374151;
+    --secondary-fg: #f9fafb;
+    --hinted: #111827;
+    --hinted-fg: #f9fafb;
+    --muted: #374151;
+    --muted-fg: #9ca3af;
+    --input: #4b5563;
+    --divider: #333;
+}
+
+@layer base {
+    html,
+    body {
+        @apply w-full leading-normal;
+    }
+
+    .hidden {
+        display: none;
+    }
+
+    h1 {
+        @apply font-bold text-xl;
+    }
+
+    h2 {
+        @apply font-bold text-lg;
+    }
+
+    h3 {
+        @apply font-bold;
+    }
+
+    a {
+        @apply break-words hover:underline;
+    }
+
+    iframe {
+        outline: none;
+    }
+}
+
+@layer components {
+    * {
+        @apply outline-none;
+    }
+
+    .btn {
+        @apply h-8 rounded-full px-4 whitespace-nowrap text-sm;
+        @apply bg-primary text-primary-fg;
+        @apply disabled:bg-muted disabled:text-muted-fg;
+        @apply hover:bg-primarysw-600 disabled:hover:bg-muted;
+        @apply fancy-shadow;
+    }
+
+    .btn-toggle {
+        @apply h-8 rounded-full px-4 whitespace-nowrap text-sm fancy-shadow;
+    }
+
+    .btn-toggle.active {
+        @apply bg-primary text-primary-fg;
+    }
+
+    .btn-toggle.inactive {
+        @apply bg-muted text-muted-fg;
+    }
+
+    .btn-toggle:hover {
+        @apply bg-primarysw-600 text-primary-fg;
+    }
+
+    .search {
+        @apply border border-input rounded-full px-4 py-2 dark:text-white;
+    }
+
+    .search > input {
+        @apply outline-none bg-transparent;
+    }
+
+    .button {
+        @apply border border-primary text-primary rounded-full px-4 py-2 mt-4 outline-none;
+        @apply hover:text-primarysw-600 hover:border-primarysw-600;
+        @apply focus:text-primarysw-500 focus:border-primarysw-500;
+        @apply active:text-primarysw-700 active:border-primarysw-700;
+    }
+
+    .button-muted {
+        @apply border border-muted text-muted-fg rounded-full px-4 py-2 outline-none;
+        @apply focus:text-muted-fg focus:border-muted;
+        @apply hover:text-primarysw-600 hover:border-primarysw-600;
+        @apply active:text-primarysw-700 active:border-primarysw-700;
+    }
+
+    .textfield {
+        @apply px-2 py-1 bg-transparent dark:text-white border border-divider rounded-md focus:border-primary focus:outline-none;
+    }
+
+    .pswp__button--zoom,
+    .pswp__button--close {
+        display: none !important;
+    }
+
+    .pswp__top-bar {
+        top: auto !important;
+        bottom: 0 !important;
+        justify-content: flex-start !important;
+        height: auto !important;
+    }
+}
+
+@layer utilities {
+    .no-touch-highlight {
+        -webkit-tap-highlight-color: rgba(255, 255, 255, 0);
+    }
+
+    .disable-pointer-events {
+        pointer-events: none;
+    }
+
+    .enable-pointer-events {
+        pointer-events: all;
+    }
+
+    .break-any {
+        overflow-wrap: anywhere;
+    }
+
+    i.icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    i.icon > svg {
+        @apply w-full h-full;
+    }
+
+    .fancy-shadow {
+        box-shadow: rgb(0 0 0 / 8%) 0px 1px 2px, rgb(0 0 0 / 5%) 0px 4px 12px;
+        @apply dark:shadow-white/10 dark:shadow;
+    }
+
+    /* For Webkit-based browsers (Chrome, Safari and Opera) */
+    .scrollbar-hide::-webkit-scrollbar {
+        display: none;
+    }
+
+    /* For IE, Edge and Firefox */
+    .scrollbar-hide {
+        -ms-overflow-style: none; /* IE and Edge */
+        scrollbar-width: none; /* Firefox */
+    }
+}

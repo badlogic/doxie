@@ -1,0 +1,11 @@
+{
+    "compilerOptions": {
+        "target": "ES6",
+        "module": "CommonJS",
+        "strict": true,
+        "lib": ["es2021", "dom", "WebWorker"],
+        "esModuleInterop": true,
+        "experimentalDecorators": true,
+        "skipLibCheck": true
+    }
+}

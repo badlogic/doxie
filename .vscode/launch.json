@@ -1,0 +1,29 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "server",
+            "type": "node",
+            "port": 9230,
+            "request": "attach",
+            "address": "localhost",
+            "localRoot": "${workspaceFolder}/build",
+            "remoteRoot": "/app/build",
+            "restart": true,
+            "continueOnAttach": true
+        },
+        {
+            "type": "chrome",
+            "request": "launch",
+            "name": "client",
+            "url": "http://localhost:8080/",
+            "webRoot": "${workspaceFolder}/html"
+        }
+    ],
+    "compounds": [
+        {
+            "name": "dev",
+            "configurations": ["server", "client"]
+        }
+    ]
+}

@@ -1,0 +1,48 @@
+version: "3"
+volumes:
+    db_data:
+services:
+    web:
+        image: nginx:alpine
+        restart: always
+        volumes:
+            - ./nginx.conf:/etc/nginx/conf.d/default.conf
+            - ../html:/www
+            - ./data/logs:/logs
+        links:
+            - server
+        networks:
+            - network
+
+    server:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        stop_grace_period: 0s
+        environment:
+            PORT: __app_server_port__
+            DATABASE: __app_db_name__
+            DATABASE_USER: __app_db_user__
+            DATABASE_PASSWORD: __app_db_password__
+        volumes:
+            - ./data:/data
+            - ../:/app
+        links:
+            - db
+        networks:
+            - network
+    db:
+        image: postgres:16-alpine
+        restart: always
+        environment:
+            POSTGRES_DB: __app_db_name__
+            POSTGRES_USER: __app_db_user__
+            POSTGRES_PASSWORD: __app_db_password__
+        volumes:
+            - db_data:/var/lib/postgresql/data
+        networks:
+            - network
+
+networks:
+    network:
+        driver: bridge
