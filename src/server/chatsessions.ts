@@ -80,7 +80,7 @@ export class ChatSessions {
             if (rawMessage.role == "system") continue;
             expandedQuery += "\n" + rawMessage.content;
         }
-        const context = await this.rag.query(expandedQuery);
+        const context = await this.rag.query(expandedQuery, 10);
         const messages = session.messages;
         const contextContent = context.map((segment, index) => "###context-" + index + "\n" + segment.doc?.title + "\n" + segment.text).join("\n\n");
         const messageContent = `###question\n${message}\n\n${contextContent}`;
@@ -96,12 +96,16 @@ export class ChatSessions {
         submittedMessages.push(messages[messages.length - 1]);
         const stream = await this.openai.chat.completions.create({ model: "gpt-3.5-turbo-1106", messages: submittedMessages, stream: true });
         let first = true;
+        let commandCharFound = false;
         for await (const completion of stream) {
             if (first) {
                 completion.choices[0].delta.content = completion.choices[0].delta.content?.trimStart();
                 first = false;
             }
-            chunkcb(completion);
+            if (completion.choices[0].delta.content?.includes("###")) {
+                commandCharFound = true;
+            }
+            if (!commandCharFound) chunkcb(completion);
             response += completion.choices[0].delta.content ?? "";
         }
 
@@ -121,11 +125,14 @@ export class ChatSessions {
             const ids = extractIDs(response);
 
             if (ids.length > 0) {
-                let links = "\n\nLinks\n";
+                let links = "\n**Links**\n";
+                const seenDocs = new Set<string>();
                 for (const id of ids) {
                     const segment = context[id];
                     if (!segment) continue;
-                    links += `[${segment.doc?.title}](${segment.doc?.uri})`;
+                    if (seenDocs.has(segment.doc!.uri)) continue;
+                    seenDocs.add(segment.doc!.uri);
+                    links += `[${segment.doc?.title}](${segment.doc?.uri})\n`;
                 }
                 chunkcb({
                     id: "",

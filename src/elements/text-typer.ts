@@ -1,6 +1,7 @@
 import { customElement, property, state } from "lit/decorators.js";
 import { BaseElement } from "../app";
 import { PropertyValueMap, html, nothing } from "lit";
+import { unsafeHTML } from "lit-html/directives/unsafe-html.js";
 
 @customElement("text-typer")
 export class TextTyper extends BaseElement {
@@ -31,6 +32,6 @@ export class TextTyper extends BaseElement {
     render() {
         const complete = this.typedText == this.text || this.stopped;
         // prettier-ignore
-        return html` <div class="whitespace-pre-wrap break-words">${this.typedText}${!complete ? html`<span class="ml-2 w-3 h-3 inline-block rounded-full bg-[#ccccc] dark:bg-[#f0f0f0]"></span>` : nothing}</div>`;
+        return html` <div class="whitespace-pre-wrap break-words">${unsafeHTML(this.typedText)}${!complete ? html`<span class="ml-2 w-3 h-3 inline-block rounded-full bg-[#ccccc] dark:bg-[#f0f0f0]"></span>` : nothing}</div>`;
     }
 }

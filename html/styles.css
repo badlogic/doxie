@@ -135,6 +135,10 @@
         justify-content: flex-start !important;
         height: auto !important;
     }
+
+    .gpt-reply a {
+        @apply text-blue-500;
+    }
 }
 
 @layer utilities {

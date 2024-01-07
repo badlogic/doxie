@@ -42,11 +42,6 @@ export class App extends LitElement {
             () => html`<chat-page></chat-page>`,
             () => "Chat"
         );
-        router.addRoute(
-            "/embeddings",
-            () => html`<embeddings-page></embeddings-page>`,
-            () => "Embeddings"
-        );
 
         router.setRootRoute("/");
         router.setNotFoundRoot("/404");

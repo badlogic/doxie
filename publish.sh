@@ -12,7 +12,7 @@ rsync -avz --exclude node_modules --exclude .git --exclude data --exclude docker
 
 if [ "$1" == "server" ]; then
     echo "Publishing client & server"
-    ssh -t $host "export DOXIE_OPEN_AI_KEY=$DOXIE_OPEN_AI_KEY && cd $host_dir && ./docker/control.sh stop && ./docker/control.sh start && ./docker/control.sh logs"
+    ssh -t $host "export DOXIE_OPENAI_KEY=$DOXIE_OPENAI_KEY && cd $host_dir && ./docker/control.sh stop && ./docker/control.sh start && ./docker/control.sh logs"
 else
     echo "Publishing client only"
 fi

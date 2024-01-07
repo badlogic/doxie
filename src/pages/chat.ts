@@ -1,7 +1,9 @@
+import * as DOMPurify from "dompurify";
 import { PropertyValueMap, html, nothing } from "lit";
-import { repeat } from "lit-html/directives/repeat.js";
+import { unsafeHTML } from "lit-html/directives/unsafe-html.js";
 import { customElement, property, state } from "lit/decorators.js";
-import { BaseElement, dom, getScrollParent, renderError, waitForLitElementsToRender } from "../app";
+import { marked } from "marked";
+import { BaseElement, dom, getScrollParent, renderError } from "../app";
 import { Api } from "../common/api";
 import { sendIcon } from "../utils/icons";
 
@@ -22,7 +24,8 @@ export class ChatMessage extends BaseElement {
 
         const color = this.message?.role == "doxie" ? "#ab68ff" : "#512da8";
         const role = this.message?.role;
-        const text = this.message?.text;
+        const text = this.message?.text ?? "";
+        const markdown = DOMPurify.sanitize(marked.parse(text) as string);
 
         return html`<div class="flex w-full px-4 gap-4">
             <div
@@ -33,7 +36,7 @@ export class ChatMessage extends BaseElement {
             </div>
             <div class="w-full flex flex-col">
                 <div class="font-semibold">${this.message?.role}</div>
-                ${role == "doxie" ? html`<text-typer .text=${text}></text-typer>` : html`<div class="whitespace-pre-wrap">${text}</div>`}
+                ${role == "doxie" ? html`<text-typer .text=${markdown}></text-typer>` : html`<div class="whitespace-pre-wrap">${text}</div>`}
             </div>
         </div>`;
     }
@@ -85,6 +88,7 @@ export class ChatGptReply extends BaseElement {
     render() {
         const color = "#ab68ff";
         const cursor = !this.isComplete ? html`<span class="ml-2 w-3 h-3 inline-block rounded-full bg-[#ccccc] dark:bg-[#f0f0f0]"></span>` : nothing;
+        const markdown = DOMPurify.sanitize(marked.parse(this.text.trim()) as string);
 
         // prettier-ignore
         return html`<div class="flex w-full px-4 gap-4">
@@ -96,7 +100,7 @@ export class ChatGptReply extends BaseElement {
             </div>
             <div class="w-full flex flex-col">
                 <div class="font-semibold">Doxie</div>
-                <div class="whitespace-pre-wrap break-any">${this.text}${cursor}</div>
+                <div class="gpt-reply whitespace-pre-wrap break-any">${unsafeHTML(markdown)}${cursor}</div>
                 ${this.error
                     ? html`<div class="bg-red-500 w-full flex items-center px-4 py-2 text-[#fff] gap-2 rounded-md">${this.error}</div>`
                     : nothing}

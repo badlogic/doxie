@@ -2,8 +2,8 @@ version: "3"
 services:
     web:
         environment:
-            VIRTUAL_HOST: doxie.marioslab.io,www.doxie.marioslab.io
-            LETSENCRYPT_HOST: doxie.marioslab.io,www.doxie.marioslab.io
+            VIRTUAL_HOST: doxie.marioslab.io
+            LETSENCRYPT_HOST: doxie.marioslab.io
             LETSENCRYPT_EMAIL: badlogicgames@gmail.com
         networks:
             - reverse_proxy
