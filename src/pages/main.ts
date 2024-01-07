@@ -1,52 +1,21 @@
-import { LitElement, PropertyValueMap, html } from "lit";
+import { LitElement, PropertyValueMap, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import { Api } from "../api.js";
-import { renderError } from "../app.js";
+import { Api } from "../common/api.js";
+import { BaseElement, renderError } from "../app.js";
 import { i18n } from "../utils/i18n.js";
 import { router } from "../utils/routing.js";
 import { pageContainerStyle, pageContentStyle } from "../utils/styles.js";
+import { EmbedderDocument } from "../common/api.js";
+import { map } from "lit/directives/map.js";
 
 @customElement("main-page")
-export class MainPage extends LitElement {
-    @property()
-    isLoading = true;
-
-    @property()
-    message?: string;
-
-    @property()
-    error?: string;
-
-    protected createRenderRoot(): Element | ShadowRoot {
-        return this;
-    }
-
-    protected firstUpdated(_changedProperties: PropertyValueMap<any> | Map<PropertyKey, unknown>): void {
-        super.firstUpdated(_changedProperties);
-        this.load();
-    }
-
-    async load() {
-        try {
-            const result = await Api.hello();
-            if (result instanceof Error) throw result;
-            this.message = result.message;
-        } catch (e) {
-            this.error = i18n("Couldn't load mesage");
-            return;
-        } finally {
-            this.isLoading = false;
-        }
-    }
-
+export class MainPage extends BaseElement {
     render() {
-        if (this.isLoading) return html`<loading-spinner></loading-spinner>`;
-        if (this.error) return renderError(this.error);
-        if (!this.message) return renderError(i18n("Couldn't load mesage"));
         return html`<div class="${pageContainerStyle}">
-            <div class="${pageContentStyle}">
-                <h1>${this.message}</h1>
-                <button class="btn self-start" @click=${() => router.push("/settings")}>Settings</button>
+            <div class="${pageContentStyle} gap-2 p-4">
+                <h1 class="mt-8 text-center">Doxie</h1>
+                <a href="/embeddings">Embeddings</a>
+                <a href="/chat">Chat</a>
             </div>
         </div>`;
     }

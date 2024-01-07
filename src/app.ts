@@ -4,6 +4,7 @@ import { i18n } from "./utils/i18n.js";
 import { setupLiveReload } from "./utils/live-reload.js";
 import { renderError } from "./utils/ui-components.js";
 import { router } from "./utils/routing.js";
+export * from "./elements/index.js";
 export * from "./pages/index.js";
 export * from "./utils/ui-components.js";
 
@@ -35,6 +36,16 @@ export class App extends LitElement {
             "/settings",
             () => html`<settings-page></settings-page>`,
             () => "Settings"
+        );
+        router.addRoute(
+            "/chat",
+            () => html`<chat-page></chat-page>`,
+            () => "Chat"
+        );
+        router.addRoute(
+            "/embeddings",
+            () => html`<embeddings-page></embeddings-page>`,
+            () => "Embeddings"
         );
 
         router.setRootRoute("/");

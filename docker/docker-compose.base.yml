@@ -25,6 +25,17 @@ services:
         volumes:
             - ./data:/data
             - ../:/app
+        links:
+            - chroma
+        networks:
+            - network
+
+    chroma:
+        image: chromadb/chroma
+        restart: always
+        stop_grace_period: 0s
+        volumes:
+            - ./data/chroma:/chroma/chroma
         networks:
             - network
 

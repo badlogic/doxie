@@ -116,6 +116,8 @@ import playIconSvg from "remixicon/icons/Media/play-line.svg";
 import eyeOpenIconSvg from "remixicon/icons/System/eye-line.svg";
 // @ts-ignore
 import eyeClosedIconSvg from "remixicon/icons/System/eye-off-line.svg";
+// @ts-ignore
+import sendIconSvg from "remixicon/icons/Business/send-plane-2-line.svg";
 
 // @ts-ignore
 import favIconSvg from "../../html/favicon.svg";
@@ -182,3 +184,4 @@ export const pencilIcon = unsafeHTML(pencilIconSvg);
 export const eyeOpenIcon = unsafeHTML(eyeOpenIconSvg);
 export const eyeClosedIcon = unsafeHTML(eyeClosedIconSvg);
 export const favIcon = unsafeHTML(favIconSvg);
+export const sendIcon = unsafeHTML(sendIconSvg);

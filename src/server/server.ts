@@ -1,31 +1,135 @@
-import bodyParser from "body-parser";
 import * as chokidar from "chokidar";
 import compression from "compression";
 import cors from "cors";
-import express from "express";
+import express, { Request, Response } from "express";
+import { body, header, validationResult } from "express-validator";
 import * as fs from "fs";
 import * as http from "http";
 import multer from "multer";
 import WebSocket, { WebSocketServer } from "ws";
+import { EmbedderDocument, EmbedderDocumentSegment } from "../common/api";
+import { ErrorReason } from "../common/errors";
+import { Embedder } from "./embedder";
+import { ChatSessions } from "./chatsessions";
+import { ChromaClient, IEmbeddingFunction } from "chromadb";
+import { Rag } from "./rag";
+
 const upload = multer({ storage: multer.memoryStorage() });
 
 const port = process.env.PORT ?? 3333;
 const openaiKey = process.env.OPENAI_KEY;
+if (!openaiKey) {
+    console.error("Please specify the OPENAI_KEY env var");
+    process.exit(-1);
+}
+
+function apiSuccess<T>(res: Response, data?: T) {
+    return res.json({ success: true, data });
+}
+
+function apiError<E extends ErrorReason = ErrorReason>(res: Response, error: string, validationErrors?: any) {
+    return res.status(400).json({ success: false, error, validationErrors });
+}
+
+function logError(endpoint: string, message: string, e: any) {
+    console.error(`${endpoint}: ${message}`, e);
+}
 
 (async () => {
     if (!fs.existsSync("docker/data")) {
         fs.mkdirSync("docker/data");
     }
 
+    await Rag.waitForChroma();
+    const embedder = new Embedder(openaiKey);
+    const rag = new Rag(embedder);
+    const berufsLexikonFile = "docker/data/berufslexikon.embeddings.bin";
+    const berufsLexikon = await rag.loadCollection("berufslexikon", berufsLexikonFile);
+    const sessions = new ChatSessions(openaiKey, berufsLexikon);
+
     const app = express();
     app.set("json spaces", 2);
     app.use(cors());
     app.use(compression());
-    app.use(bodyParser.urlencoded({ extended: true }));
+    app.use(express.json());
+    app.set("trust proxy", true);
 
-    app.get("/api/hello", (req, res) => {
-        res.json({ message: "Hello world" });
+    app.post("/api/tokenize", [body("text").isString().notEmpty()], async (req: Request, res: Response) => {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
+        try {
+            const text = req.body.text;
+            const embedding = await embedder.tokenize(text);
+            apiSuccess(res, embedding);
+        } catch (e) {
+            logError(req.path, "Couldn't tokenize text", e);
+            apiError(res, "Unkown server error");
+        }
     });
+
+    app.post("/api/embed", [body("texts").isArray().isLength({ min: 1 })], async (req: Request, res: Response) => {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
+        try {
+            const texts = req.body.texts;
+            const embedding = await embedder.embed(texts);
+            apiSuccess(res, embedding);
+        } catch (e) {
+            logError(req.path, "Couldn't embed texts", e);
+            apiError(res, "Unkown server error");
+        }
+    });
+
+    /*app.post("/api/vectorquery", [body("query").isString().notEmpty()], async (req: Request, res: Response) => {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
+        try {
+            const query = req.body.query;
+            const embedding = await embedder.query(docs, query);
+            apiSuccess(res, embedding);
+        } catch (e) {
+            logError(req.path, "Couldn't embed texts", e);
+            apiError(res, "Unkown server error");
+        }
+    });*/
+
+    app.post("/api/createSession", async (req: Request, res: Response) => {
+        try {
+            const sessionId = sessions.createSession(req.ip ?? "");
+            apiSuccess(res, { sessionId });
+        } catch (e) {
+            logError(req.path, "Couldn't create session", e);
+            apiError(res, "Unknown server error");
+        }
+    });
+
+    app.post(
+        "/api/complete",
+        [header("authorization").notEmpty().isString(), body("message").notEmpty().isString()],
+        async (req: Request, res: Response) => {
+            try {
+                const sessionId = req.headers.authorization!;
+                const message = req.body.message;
+                await sessions.complete(sessionId, message, (chunk) => {
+                    const content = chunk.choices[0].delta.content;
+                    const encoder = new TextEncoder();
+                    if (content) {
+                        const bytes = encoder.encode(content);
+                        const numBytes = new Uint32Array(1);
+                        numBytes[0] = bytes.length;
+                        const uint8 = new Uint8Array(numBytes.buffer);
+                        res.write(uint8);
+                        res.write(bytes);
+                        res.flush();
+                    }
+                });
+                res.end();
+            } catch (e) {
+                logError(req.path, "Couldn't complete message", e);
+                apiError(res, "Unknown server error");
+            }
+        }
+    );
 
     const server = http.createServer(app);
     server.listen(port, async () => {

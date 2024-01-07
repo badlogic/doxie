@@ -22,7 +22,7 @@
 
 /* Dark theme variables */
 .dark {
-    --background: #111111;
+    --background: #343541;
     --accent: #3b82f6;
     --accent-dark: #1e40af;
     --primary: #cc7d24;
@@ -35,7 +35,7 @@
     --muted: #374151;
     --muted-fg: #9ca3af;
     --input: #4b5563;
-    --divider: #333;
+    --divider: #9ca3af9b;
 }
 
 @layer base {
@@ -107,14 +107,14 @@
     }
 
     .button {
-        @apply border border-primary text-primary rounded-full px-4 py-2 mt-4 outline-none;
+        @apply border border-primary text-primary rounded-md px-4 py-2 outline-none uppercase;
         @apply hover:text-primarysw-600 hover:border-primarysw-600;
         @apply focus:text-primarysw-500 focus:border-primarysw-500;
         @apply active:text-primarysw-700 active:border-primarysw-700;
     }
 
     .button-muted {
-        @apply border border-muted text-muted-fg rounded-full px-4 py-2 outline-none;
+        @apply border border-muted text-muted-fg rounded-md px-4 py-2 outline-none;
         @apply focus:text-muted-fg focus:border-muted;
         @apply hover:text-primarysw-600 hover:border-primarysw-600;
         @apply active:text-primarysw-700 active:border-primarysw-700;
