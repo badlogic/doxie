@@ -16,7 +16,7 @@
             "type": "chrome",
             "request": "launch",
             "name": "client",
-            "url": "http://localhost:8080/",
+            "url": "http://localhost:8080/chat",
             "webRoot": "${workspaceFolder}/html"
         }
     ],
