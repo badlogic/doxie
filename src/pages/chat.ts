@@ -4,11 +4,12 @@ import { unsafeHTML } from "lit-html/directives/unsafe-html.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { Marked } from "marked";
 import { BaseElement, dom, getScrollParent, renderError } from "../app";
-import { Api } from "../common/api";
+import { Api, CompletionDebug } from "../common/api";
 import { sendIcon } from "../utils/icons";
 import { router } from "../utils/routing";
 import { markedHighlight } from "marked-highlight";
 import hljs from "highlight.js";
+import { map } from "lit/directives/map.js";
 
 export interface Message {
     role: "doxie" | "user" | "error";
@@ -66,11 +67,11 @@ export class ChatGptReply extends BaseElement {
     @property()
     completeCb = () => {};
 
-    @property()
-    newDataCb = () => {};
-
     @state()
     text = "";
+
+    @state()
+    debug?: CompletionDebug;
 
     @state()
     isComplete = false;
@@ -85,10 +86,16 @@ export class ChatGptReply extends BaseElement {
             const query = this.query;
             const sessionId = this.sessionId;
             (async () => {
-                const result = await Api.complete(sessionId, collection, query, (chunk, done) => {
-                    this.text += chunk;
+                const result = await Api.complete(sessionId, collection, query, (chunk, type, done) => {
+                    if (type == "text") {
+                        this.text += chunk;
+                    } else {
+                        this.debug = JSON.parse(chunk) as CompletionDebug;
+                    }
                     this.isComplete = done;
-                    this.newDataCb();
+                    if (this.isComplete) {
+                        console.log("Is complete");
+                    }
                 });
                 if (!result.success) {
                     this.isComplete = true;
@@ -103,6 +110,12 @@ export class ChatGptReply extends BaseElement {
         const color = "#ab68ff";
         const cursor = !this.isComplete ? html`<span class="ml-2 w-3 h-3 inline-block rounded-full bg-[#ccccc] dark:bg-[#f0f0f0]"></span>` : nothing;
         const markdown = DOMPurify.sanitize(marked.parse(this.text.trim()) as string);
+        const debugQuery = this.debug?.query;
+        const debugRagHistory = this.debug?.ragHistory;
+        const debugRagQuery = this.debug?.ragQuery;
+        const debugMessages = this.debug?.submittedMessages;
+        const debugResponse = this.debug?.response;
+        const debugTokens = (this.debug?.tokensIn ?? 0) + (this.debug?.tokensOut ?? 0);
 
         // prettier-ignore
         return html`<div class="flex w-full max-w-full px-4 gap-4">
@@ -118,6 +131,32 @@ export class ChatGptReply extends BaseElement {
                 ${this.error
                     ? html`<div class="bg-red-500 w-full flex items-center px-4 py-2 text-[#fff] gap-2 rounded-md">${this.error}</div>`
                     : nothing}
+                    ${debugQuery ? html`
+                    <div class="debug hljs p-4 w-full flex flex-col mt-2">
+                        <span class="text-sm font-semibold">User query</span>
+                        <pre><code>${debugQuery}</code></pre>
+                    </div>`: nothing}
+                    ${debugRagHistory ? html`
+                    <div class="debug hljs p-4 w-full flex flex-col mt-2">
+                        <span class="text-sm font-semibold">RAG history</span>
+                        <pre><code>${debugRagHistory}</code></pre>
+                    </div>`: nothing}
+                ${debugRagQuery ? html`
+                    <div class="debug hljs p-4 w-full flex flex-col mt-2">
+                        <span class="text-sm font-semibold">RAG query</span>
+                        <pre><code>${debugRagQuery}</code></pre>
+                    </div>`: nothing}
+                ${debugMessages && debugResponse? html`
+                    <div class="debug hljs p-4 w-full flex flex-col mt-2">
+                        <span class="text-sm font-semibold">Request/Response</span>
+                        <pre class="whitespace-pre-wrap"><code>${map(debugMessages, (msg) => html`<b class="text-green-400">${msg.role}</b>\n${msg.content}\n`)}\n\n<b class="text-green-400">response</b>\n${debugResponse}</code></pre>
+                    </div>`: nothing}
+                    ${debugTokens > 0 ? html`
+                    <div class="debug hljs p-4 w-full flex flex-col mt-2">
+                        <span class="text-sm font-semibold">Tokens</span>
+                        <pre class="whitespace-pre-wrap"><code class="text-blue-400">${this.debug?.tokensIn} in, ${this.debug?.tokensOut} out, ${debugTokens} total</code></pre>
+                    </div>`: nothing}
+                </div>
             </div>
         </div>`;
     }

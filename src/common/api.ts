@@ -21,6 +21,16 @@ export interface JsonValue {
     [key: string]: any;
 }
 
+export interface CompletionDebug {
+    query: string;
+    ragHistory: string;
+    ragQuery: string;
+    submittedMessages: { role: string; content: string }[];
+    response: string;
+    tokensIn: number;
+    tokensOut: number;
+}
+
 export type ApiResponse<T, E extends ErrorReason = ErrorReason> = ApiResponseSuccess<T> | ApiResponseError<E>;
 
 interface ApiResponseSuccess<T> {
@@ -95,7 +105,7 @@ export class Api {
         sessionId: string,
         collection: string,
         message: string,
-        chunkCb: (chunk: string, done: boolean) => void
+        chunkCb: (chunk: string, type: "text" | "debug", done: boolean) => void
     ): Promise<ApiResponse<void, "Could not get completion">> {
         try {
             const response = await fetch("/api/complete", {
@@ -117,6 +127,17 @@ export class Api {
                 mergedArray.set(array1);
                 mergedArray.set(array2, array1.length);
                 return mergedArray;
+            }
+
+            async function readByte(): Promise<number | null> {
+                while (buffer.length < 1) {
+                    const { done, value } = await reader.read();
+                    if (done) return null;
+                    buffer = mergeUint8Arrays(buffer, value);
+                }
+                const byte = new DataView(buffer.buffer).getUint8(0);
+                buffer = buffer.slice(1);
+                return byte;
             }
 
             async function readLength(): Promise<number | null> {
@@ -143,19 +164,20 @@ export class Api {
 
             while (true) {
                 try {
+                    const typeByte = await readByte();
+                    const type = typeByte == 0 || typeByte == null || typeByte == undefined ? "text" : "debug";
                     const length = await readLength();
                     if (length === null) {
-                        chunkCb("", true);
+                        chunkCb("", "text", true);
                         break;
                     }
 
                     const string = await readString(length);
                     if (string === null) {
-                        chunkCb("", true);
+                        chunkCb("", "text", true);
                         break;
                     }
-                    console.log(string);
-                    chunkCb(string, false);
+                    chunkCb(string, type, false);
                 } catch (e) {
                     return { success: false, error: "Could not get completion" };
                 }
@@ -163,6 +185,7 @@ export class Api {
 
             return { success: true, data: undefined };
         } catch (e) {
+            console.log(e);
             return { success: false, error: "Could not get completion" };
         }
     }

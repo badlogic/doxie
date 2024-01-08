@@ -10,6 +10,7 @@ const config = {
         bskyarchive: "src/server/sources/bskyarchive.ts",
         berufslexikon: "src/server/sources/berufslexikon.ts",
         spine: "src/server/sources/spine.ts",
+        flarum: "src/server/sources/flarum.ts",
         "embedder-cli": "src/server/embedder-cli.ts",
         test: "src/server/test.ts",
     },

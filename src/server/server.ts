@@ -79,15 +79,17 @@ function logError(endpoint: string, message: string, e: any) {
                 const sessionId = req.headers.authorization!;
                 const collection = req.body.collection;
                 const message = req.body.message;
-                await sessions.complete(sessionId, collection, message, (chunk) => {
-                    const content = chunk.choices[0].delta.content;
+                await sessions.complete(sessionId, collection, message, (content, type) => {
                     const encoder = new TextEncoder();
                     if (content) {
                         const bytes = encoder.encode(content);
+                        const typeUint8 = new Uint8Array(1);
+                        typeUint8[0] = type == "text" ? 0 : 1;
                         const numBytes = new Uint32Array(1);
                         numBytes[0] = bytes.length;
-                        const uint8 = new Uint8Array(numBytes.buffer);
-                        res.write(uint8);
+                        const numBytesUint8 = new Uint8Array(numBytes.buffer);
+                        res.write(typeUint8);
+                        res.write(numBytesUint8);
                         res.write(bytes);
                         res.flush();
                     }

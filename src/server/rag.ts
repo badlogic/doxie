@@ -34,6 +34,40 @@ export class RagCollection {
 
         return segments;
     }
+
+    async expandQuery(query: string, context: string) {
+        const systemMessage = `you are a query expansion system. you are used to expand queries with sentences or phrases to increase the precision and recall in an information retrieval system.
+
+Your input is the raw natural language query followed by the (optional) conversation history between the user and an information retrieval assistant:
+"
+was mache ich als programmierer?
+
+###history
+user: wie werde ich programmierer?
+assistant: Um Programmierer zu werden, sollten Sie eine Ausbildung im Bereich Informatik, Technische Informatik oder Wirtschaftsinformatik absolvieren. Universitäten und Fachhochschulen bieten Studiengänge mit Schwerpunkten in verschiedenen Anwendungsgebieten wie medizinische Assistenz-Systeme, E-Health, Automotive, Prozessleittechnik oder Mechatronik an.
+user: was kann ich verdienen?
+assistant: Das Einkommen für ProgrammiererInnen kann je nach Qualifikation, Erfahrung und dem konkreten Aufgabenbereich variieren. Ein formaler Abschluss im IT-Bereich sowie Spezialisierungen in Datensicherheit und anderen relevanten Bereichen können sich positiv auf das Gehalt auswirken. Zudem ist lebenslanges Lernen aufgrund des ständigen technologischen Fortschritts unerlässlich.
+"
+
+The user may change topic with respect to the history, in which case you ignore the history and generate an expansion just for the user query itself.
+
+You output sentences and phrases based on the query and taking into account the history, which will be combined with the user query and used to retrieve relevant documents. Example output:
+
+"
+Tätigkeiten als Programmierer
+Aufgaben eines Programmierers
+Berufsbild Programmierer
+"`;
+
+        const response = await this.openai.chat.completions.create({
+            model: "gpt-3.5-turbo-1106",
+            messages: [
+                { role: "system", content: systemMessage },
+                { role: "user", content: query + (context.trim().length == 0 ? "" : "\n\n###history" + context.trim()) },
+            ],
+        });
+        return response.choices[0].message.content;
+    }
 }
 
 export class Rag {

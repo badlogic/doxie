@@ -141,8 +141,12 @@
         @apply text-blue-500;
     }
 
+    .debug {
+        @apply max-w-full text-xs rounded-md overflow-auto mt-2;
+    }
+
     .gpt-reply pre {
-        @apply max-w-full text-xs rounded-md overflow-auto;
+        @apply max-w-full text-xs rounded-md overflow-auto mt-2;
     }
 
     .gpt-reply p:not(:first-child) {
