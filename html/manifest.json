@@ -2,7 +2,7 @@
     "name": "doxie",
     "short_name": "doxie",
     "description": "Chat with your documents",
-    "start_url": "/",
+    "start_url": "/chat",
     "display": "standalone",
     "background_color": "#000c15",
     "theme_color": "#000c15",

@@ -1,3 +1,4 @@
+@import "highlight.js/styles/atom-one-dark.min.css";
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -138,6 +139,27 @@
 
     .gpt-reply a {
         @apply text-blue-500;
+    }
+
+    .gpt-reply pre {
+        @apply max-w-full text-xs rounded-md overflow-auto;
+    }
+
+    .gpt-reply p:not(:first-child) {
+        @apply mt-2;
+    }
+
+    .gpt-reply p code,
+    .gpt-reply li code {
+        @apply text-sm px-1 border border-divider bg-black text-white;
+    }
+
+    .gpt-reply ol {
+        @apply list-disc list-inside;
+    }
+
+    .gpt-reply ul {
+        @apply list-disc list-inside;
     }
 }
 

@@ -87,24 +87,13 @@ export async function apiPost<T, E extends ErrorReason = ErrorReason>(
 }
 
 export class Api {
-    static async tokenize(text: string) {
-        return apiPost<number[]>("tokenize", { text });
-    }
-
-    static async embed(texts: string[]) {
-        return apiPost<number[][]>("embed", { texts });
-    }
-
-    static async vectorQuery(query: string) {
-        return apiPost<any>("vectorquery", { query });
-    }
-
-    static async createSession() {
-        return apiPost<{ sessionId: string }>("createSession", {});
+    static async createSession(collection: string) {
+        return apiPost<{ sessionId: string }>("createSession", { collection });
     }
 
     static async complete(
         sessionId: string,
+        collection: string,
         message: string,
         chunkCb: (chunk: string, done: boolean) => void
     ): Promise<ApiResponse<void, "Could not get completion">> {
@@ -115,7 +104,7 @@ export class Api {
                     "Content-Type": "application/json",
                     Authorization: sessionId,
                 },
-                body: JSON.stringify({ message }),
+                body: JSON.stringify({ message, collection }),
             });
             if (!response.ok) return { success: false, error: "Could not get completion" };
             if (!response.body) return { success: false, error: "Unknown server error" };
@@ -145,7 +134,6 @@ export class Api {
                 while (buffer.length < length) {
                     const { done, value } = await reader.read();
                     if (done) return null;
-                    console.log(value.length);
                     buffer = mergeUint8Arrays(buffer, value);
                 }
                 const stringBytes = buffer.slice(0, length);

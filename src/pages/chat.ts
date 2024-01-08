@@ -2,15 +2,28 @@ import * as DOMPurify from "dompurify";
 import { PropertyValueMap, html, nothing } from "lit";
 import { unsafeHTML } from "lit-html/directives/unsafe-html.js";
 import { customElement, property, state } from "lit/decorators.js";
-import { marked } from "marked";
+import { Marked } from "marked";
 import { BaseElement, dom, getScrollParent, renderError } from "../app";
 import { Api } from "../common/api";
 import { sendIcon } from "../utils/icons";
+import { router } from "../utils/routing";
+import { markedHighlight } from "marked-highlight";
+import hljs from "highlight.js";
 
 export interface Message {
     role: "doxie" | "user" | "error";
     text: string;
 }
+
+const marked = new Marked(
+    markedHighlight({
+        langPrefix: "hljs language-",
+        highlight(code, lang, info) {
+            const language = hljs.getLanguage(lang) ? lang : "plaintext";
+            return hljs.highlight(code, { language }).value;
+        },
+    })
+);
 
 @customElement("chat-message")
 export class ChatMessage extends BaseElement {
@@ -32,11 +45,11 @@ export class ChatMessage extends BaseElement {
                 class="w-6 h-6 rounded-full dark:border dark:border-muted-fg flex items-center justify-center text-white text-sm"
                 style="background-color: ${color};"
             >
-                <span>${role?.substring(0, 1)}</span>
+                <span>${role?.substring(0, 1).toUpperCase()}</span>
             </div>
             <div class="w-full flex flex-col">
                 <div class="font-semibold">${this.message?.role}</div>
-                ${role == "doxie" ? html`<text-typer .text=${markdown}></text-typer>` : html`<div class="whitespace-pre-wrap">${text}</div>`}
+                ${role == "doxie" ? html`<text-typer .text=${markdown}></text-typer>` : html`<div>${unsafeHTML(markdown)}</div>`}
             </div>
         </div>`;
     }
@@ -67,11 +80,12 @@ export class ChatGptReply extends BaseElement {
 
     protected firstUpdated(_changedProperties: PropertyValueMap<any> | Map<PropertyKey, unknown>): void {
         super.firstUpdated(_changedProperties);
+        const collection = router.getCurrentParams()?.get("collection") ?? "berufslexikon";
         if (this.query && this.sessionId) {
             const query = this.query;
             const sessionId = this.sessionId;
             (async () => {
-                const result = await Api.complete(sessionId, query, (chunk, done) => {
+                const result = await Api.complete(sessionId, collection, query, (chunk, done) => {
                     this.text += chunk;
                     this.isComplete = done;
                     this.newDataCb();
@@ -91,16 +105,16 @@ export class ChatGptReply extends BaseElement {
         const markdown = DOMPurify.sanitize(marked.parse(this.text.trim()) as string);
 
         // prettier-ignore
-        return html`<div class="flex w-full px-4 gap-4">
+        return html`<div class="flex w-full max-w-full px-4 gap-4">
             <div
-                class="w-6 h-6 rounded-full dark:border dark:border-muted-fg flex items-center justify-center text-white text-sm"
+                class="flex-shrink-0 w-6 h-6 rounded-full dark:border dark:border-muted-fg flex items-center justify-center text-white text-sm"
                 style="background-color: ${color};"
             >
                 <span>D</span>
             </div>
-            <div class="w-full flex flex-col">
+            <div class="overflow-auto flex-1 flex flex-col">
                 <div class="font-semibold">Doxie</div>
-                <div class="gpt-reply whitespace-pre-wrap break-any">${unsafeHTML(markdown)}${cursor}</div>
+                <div class="gpt-reply w-full">${unsafeHTML(markdown)}${cursor}</div>
                 ${this.error
                     ? html`<div class="bg-red-500 w-full flex items-center px-4 py-2 text-[#fff] gap-2 rounded-md">${this.error}</div>`
                     : nothing}
@@ -131,7 +145,8 @@ export class ChatPage extends BaseElement {
 
     async connect() {
         try {
-            const sessionId = await Api.createSession();
+            const collection = router.getCurrentParams()?.get("collection") ?? "berufslexikon";
+            const sessionId = await Api.createSession(collection);
             if (!sessionId.success) {
                 this.addMessage({ role: "error", text: "Could not create chat session. Try again later" });
                 return;

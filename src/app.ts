@@ -42,6 +42,11 @@ export class App extends LitElement {
             () => html`<chat-page></chat-page>`,
             () => "Chat"
         );
+        router.addRoute(
+            "/chat/:collection",
+            () => html`<chat-page></chat-page>`,
+            () => "Chat"
+        );
 
         router.setRootRoute("/");
         router.setNotFoundRoot("/404");

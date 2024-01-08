@@ -45,7 +45,9 @@ function logError(endpoint: string, message: string, e: any) {
     const rag = new Rag(embedder);
     const berufsLexikonFile = "docker/data/berufslexikon.embeddings.bin";
     const berufsLexikon = await rag.loadCollection("berufslexikon", berufsLexikonFile);
-    const sessions = new ChatSessions(openaiKey, berufsLexikon);
+    const spineFile = "docker/data/spine.embeddings.bin";
+    const spine = await rag.loadCollection("spine", spineFile);
+    const sessions = new ChatSessions(openaiKey, [berufsLexikon, spine]);
 
     const app = express();
     app.set("json spaces", 2);
@@ -54,48 +56,12 @@ function logError(endpoint: string, message: string, e: any) {
     app.use(express.json());
     app.set("trust proxy", true);
 
-    app.post("/api/tokenize", [body("text").isString().notEmpty()], async (req: Request, res: Response) => {
+    app.post("/api/createSession", [body("collection").notEmpty().isString()], async (req: Request, res: Response) => {
         const errors = validationResult(req);
         if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
         try {
-            const text = req.body.text;
-            const embedding = await embedder.tokenize(text);
-            apiSuccess(res, embedding);
-        } catch (e) {
-            logError(req.path, "Couldn't tokenize text", e);
-            apiError(res, "Unkown server error");
-        }
-    });
-
-    app.post("/api/embed", [body("texts").isArray().isLength({ min: 1 })], async (req: Request, res: Response) => {
-        const errors = validationResult(req);
-        if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
-        try {
-            const texts = req.body.texts;
-            const embedding = await embedder.embed(texts);
-            apiSuccess(res, embedding);
-        } catch (e) {
-            logError(req.path, "Couldn't embed texts", e);
-            apiError(res, "Unkown server error");
-        }
-    });
-
-    /*app.post("/api/vectorquery", [body("query").isString().notEmpty()], async (req: Request, res: Response) => {
-        const errors = validationResult(req);
-        if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
-        try {
-            const query = req.body.query;
-            const embedding = await embedder.query(docs, query);
-            apiSuccess(res, embedding);
-        } catch (e) {
-            logError(req.path, "Couldn't embed texts", e);
-            apiError(res, "Unkown server error");
-        }
-    });*/
-
-    app.post("/api/createSession", async (req: Request, res: Response) => {
-        try {
-            const sessionId = sessions.createSession(req.ip ?? "");
+            const collection = req.body.collection;
+            const sessionId = sessions.createSession(req.ip ?? "", collection);
             apiSuccess(res, { sessionId });
         } catch (e) {
             logError(req.path, "Couldn't create session", e);
@@ -105,12 +71,15 @@ function logError(endpoint: string, message: string, e: any) {
 
     app.post(
         "/api/complete",
-        [header("authorization").notEmpty().isString(), body("message").notEmpty().isString()],
+        [header("authorization").notEmpty().isString(), body("message").notEmpty().isString(), body("collection").notEmpty().isString()],
         async (req: Request, res: Response) => {
+            const errors = validationResult(req);
+            if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
             try {
                 const sessionId = req.headers.authorization!;
+                const collection = req.body.collection;
                 const message = req.body.message;
-                await sessions.complete(sessionId, message, (chunk) => {
+                await sessions.complete(sessionId, collection, message, (chunk) => {
                     const content = chunk.choices[0].delta.content;
                     const encoder = new TextEncoder();
                     if (content) {

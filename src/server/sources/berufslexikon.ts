@@ -1,6 +1,6 @@
 import * as fs from "fs";
 import cheerio from "cheerio";
-import { EmbedderDocument } from "../common/api";
+import { EmbedderDocument } from "../../common/api";
 
 export interface SolrRow {
     id: string; // "2189",

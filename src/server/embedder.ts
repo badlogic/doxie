@@ -3,6 +3,7 @@ import OpenAI from "openai";
 import * as fs from "fs";
 import { BufferedOutputStream, BufferedInputStream, MemoryBuffer } from "./binarystream";
 import { EmbedderDocument, EmbedderDocumentSegment } from "../common/api";
+import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
 
 // A little less than what's allowed, as the tokenizer might not be accurate
 const maxTokens = 7000;
@@ -47,7 +48,7 @@ export class Embedder {
         let i = 0;
         let totalTokens = 0;
         for (const doc of docs) {
-            this.splitIntoSegments(doc, useParagraphs);
+            await this.splitIntoSegments(doc, useParagraphs);
             for (const segment of doc.segments) {
                 totalTokens += segment.tokenCount;
             }
@@ -105,8 +106,21 @@ export class Embedder {
         }
     }
 
-    private splitIntoSegments(doc: EmbedderDocument, useParagraphs: boolean) {
-        const paragraphs = useParagraphs ? doc.text.split(/\n{2,}/) : [doc.text];
+    private async splitIntoSegments(doc: EmbedderDocument, useParagraphs: boolean) {
+        const splitter = new RecursiveCharacterTextSplitter({
+            chunkSize: 512,
+            chunkOverlap: 100,
+        });
+
+        const segments: { text: string; tokenCount: number; embedding: number[] }[] = [];
+        const textSplits = await splitter.splitText(doc.text);
+        for (const split of textSplits) {
+            const tokenCount = this.tokenize(split).length;
+            segments.push({ text: split, tokenCount, embedding: [] });
+        }
+        doc.segments = segments;
+
+        /*const paragraphs = useParagraphs ? doc.text.split(/\n{2,}/) : [doc.text];
         let segments: { text: string; tokenCount: number; embedding: number[] }[] = [];
 
         for (const paragraph of paragraphs) {
@@ -133,8 +147,7 @@ export class Embedder {
                 segments.push({ text: currentSegment, tokenCount: currentTokenCount, embedding: [] });
             }
         }
-
-        doc.segments = segments;
+        doc.segments = segments;*/
     }
 
     async writeDocuments(file: string, docs: EmbedderDocument[]): Promise<void> {
