@@ -9,3 +9,7 @@ services:
             - 3333:3333
         environment:
             - DEV=true
+
+    #unstructured-api:
+    #    ports:
+    #        - "8000:8000"

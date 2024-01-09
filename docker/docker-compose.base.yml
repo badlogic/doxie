@@ -39,6 +39,11 @@ services:
         networks:
             - network
 
+    #unstructured-api:
+    #    image: downloads.unstructured.io/unstructured-io/unstructured-api:latest
+    #    restart: always
+    #    stop_grace_period: 0s
+
 networks:
     network:
         driver: bridge

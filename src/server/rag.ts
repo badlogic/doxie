@@ -36,7 +36,7 @@ export class RagCollection {
     }
 
     async expandQuery(query: string, context: string) {
-        const systemMessage = `you are a query expansion system. you are used to expand queries with sentences or phrases to increase the precision and recall in an information retrieval system.
+        const systemMessage = `you are a query expansion system. you are used to expand queries with sentences or phrases to increase the precision and recall in an information retrieval system that uses the OpenAI Ada model for text embeddings.
 
 Your input is the raw natural language query followed by the (optional) conversation history between the user and an information retrieval assistant:
 "

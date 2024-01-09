@@ -115,9 +115,8 @@ ${contextInstructions}`,
             if (rawMessage.role == "system") continue;
             if ((rawMessage.content as string).includes("###topicdrift")) {
                 historyMessages.length = 0;
-            } else {
-                historyMessages.push(rawMessage);
             }
+            historyMessages.push(rawMessage);
         }
         let ragHistory = historyMessages
             .filter((msg) => msg.role != "system")

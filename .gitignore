@@ -6,3 +6,4 @@ src/.DS_Store
 .DS_Store
 html/version.json
 build
+report.html
