@@ -21,12 +21,15 @@ services:
         stop_grace_period: 0s
         environment:
             PORT: 3333
-            OPENAI_KEY: ${DOXIE_OPENAI_KEY}
+            DOXIE_OPENAI_KEY: ${DOXIE_OPENAI_KEY}
+            DOXIE_DB_PASSWORD: ${DOXIE_DB_PASSWORD}
+            DOXIE_ADMIN_TOKEN: ${DOXIE_ADMIN_TOKEN}
         volumes:
             - ./data:/data
             - ../:/app
         links:
             - chroma
+            - mongodb
         networks:
             - network
 
@@ -39,10 +42,19 @@ services:
         networks:
             - network
 
-    #unstructured-api:
-    #    image: downloads.unstructured.io/unstructured-io/unstructured-api:latest
-    #    restart: always
-    #    stop_grace_period: 0s
+    mongodb:
+        image: mongo
+        restart: always
+        volumes:
+            - db_data:/data/db
+        environment:
+            MONGO_INITDB_ROOT_USERNAME: doxie
+            MONGO_INITDB_ROOT_PASSWORD: ${DOXIE_DB_PASSWORD}
+        command:
+            - "--logpath"
+            - "/var/log/mongodb/mongod.log"
+        networks:
+            - network
 
 networks:
     network:

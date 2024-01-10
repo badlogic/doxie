@@ -62,7 +62,7 @@
     }
 
     a {
-        @apply break-words hover:underline;
+        @apply break-words;
     }
 
     iframe {
@@ -108,10 +108,11 @@
     }
 
     .button {
-        @apply border border-primary text-primary rounded-md px-4 py-2 outline-none uppercase;
+        @apply border border-primary text-primary rounded-md px-4 py-1 outline-none;
         @apply hover:text-primarysw-600 hover:border-primarysw-600;
         @apply focus:text-primarysw-500 focus:border-primarysw-500;
         @apply active:text-primarysw-700 active:border-primarysw-700;
+        @apply disabled:text-muted-fg disabled:border-muted-fg;
     }
 
     .button-muted {

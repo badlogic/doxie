@@ -188,11 +188,13 @@ export class Router {
         if (matchingPage) {
             this.restorePage(matchingPage);
         } else {
-            const page = route.route.renderPage();
-            const pageDom = page instanceof HTMLElement ? page : dom(page)[0];
-            getScrollParent(this.outlet)!.scrollTop = 0;
-            this.pageStack.push({ route: route.route, path, page: pageDom, srcollTop: 0, display: pageDom.style.display });
-            this.outlet.append(pageDom);
+            queueMicrotask(() => {
+                const page = route.route.renderPage();
+                const pageDom = page instanceof HTMLElement ? page : dom(page)[0];
+                getScrollParent(this.outlet)!.scrollTop = 0;
+                this.pageStack.push({ route: route.route, path, page: pageDom, srcollTop: 0, display: pageDom.style.display });
+                this.outlet.append(pageDom);
+            });
         }
         return true;
     }

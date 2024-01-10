@@ -571,6 +571,81 @@ export class SelectBox<T> extends LitElement {
     }
 }
 
+@customElement("dropdown-button")
+export class DropdownButton<T> extends LitElement {
+    @property()
+    content?: TemplateResult;
+
+    @property()
+    values: { label: string; value: T }[] = [];
+
+    @property()
+    onSelected: (value: { label: string; value: T }) => void = () => {};
+
+    @property()
+    dropdownOpen = false;
+
+    @property()
+    align: "left" | "right" = "right";
+
+    @property()
+    change: (value: T) => void = () => {};
+
+    popout?: HTMLElement;
+    popoutContainer?: HTMLElement;
+
+    protected createRenderRoot(): Element | ShadowRoot {
+        return this;
+    }
+
+    private toggleDropdown() {
+        this.dropdownOpen = !this.dropdownOpen;
+        if (this.dropdownOpen) {
+            const button = this.querySelector("button");
+            this.popoutContainer = dom(
+                html`
+                    <div class="fixed top-0 left-0 w-full h-full">
+                        <div class="fixed flex flex-col rounded-md bg-muted focus:outline-none overflow-y-auto fancy-shadow mt-1">
+                            ${this.values.map(
+                                (item) =>
+                                    html`<button @click="${() => this.handleSelect(item)}" class="px-4 py-2 text-left text-sm hover:text-primary">
+                                        ${item.label}
+                                    </button>`
+                            )}
+                        </div>
+                    </div>
+                `
+            )[0];
+            this.popout = this.popoutContainer.children[0] as HTMLElement;
+            this.popoutContainer.addEventListener("click", () => {
+                this.popoutContainer?.remove();
+                this.dropdownOpen = false;
+            });
+            document.body.append(this.popoutContainer);
+            const updatePosition = () => {
+                if (!this.popout || !this.dropdownOpen) return;
+                const rect = button!.getBoundingClientRect();
+                this.popout!.style.top = rect.bottom + "px";
+                this.popout!.style.left = rect.left + rect.width - this.popout.getBoundingClientRect().width + "px";
+                requestAnimationFrame(updatePosition);
+            };
+            updatePosition();
+        } else {
+            this.popout?.remove();
+        }
+    }
+
+    private handleSelect(item: { label: string; value: T }) {
+        this.onSelected(item);
+        this.dropdownOpen = false;
+        this.popoutContainer?.remove();
+    }
+
+    render() {
+        return html` <button @click="${this.toggleDropdown}">${this.content}</button> `;
+    }
+}
+
 @customElement("toast-element")
 export class Toast extends LitElement {
     @property()
@@ -663,7 +738,7 @@ export class Topbar extends BaseElement {
 
     render() {
         return html`
-            <div class="fixed top-0 left-0 z-10 w-screen h-12 flex items-center bg-[#fff]/60 dark:bg-[#111]/60 backdrop-blur-[8px]">
+            <div class="fixed top-0 left-0 z-10 w-screen h-12 flex items-center bg-background">
                 <div class="w-full ${this.limitWidth ? "max-w-[640px]" : ""} mx-auto h-12 pr-4 flex items-center">
                     ${this.closeButton ? html`<div class="flex-shrink-0">${this.closeButton}</div>` : html`<div class="w-4"></div>`}
                     ${this.heading instanceof HTMLElement

@@ -1,6 +1,33 @@
 import { error } from "../utils/utils.js";
 import { ErrorReason } from "./errors.js";
 
+export type Source = FlarumSource | FaqSource;
+
+export interface BaseSource {
+    _id?: string;
+    collectionId: string;
+    name: string;
+    description: string;
+}
+
+export interface FlarumSource extends BaseSource {
+    type: "flarum";
+    apiUrl: string;
+    staff: string[];
+}
+
+export interface FaqSource extends BaseSource {
+    type: "faq";
+    faqs: { question: string; answer: string; relatedUrls: string[] }[];
+}
+
+export interface Collection {
+    _id?: string;
+    name: string;
+    description: string;
+    systemPrompt: string;
+}
+
 export interface EmbedderDocumentSegment {
     text: string;
     tokenCount: number;
@@ -59,6 +86,21 @@ export async function apiGet<T, E extends ErrorReason = ErrorReason>(
         return (await result.json()) as ApiResponse<T, E | "Unknown server error">;
     } catch (e) {
         error(`GET request /api/${endpoint} failed`, e);
+        return { success: false, error: "Unknown server error" };
+    }
+}
+
+export async function apiDelete<T, E extends ErrorReason = ErrorReason>(
+    endpoint: string,
+    token?: string
+): Promise<ApiResponse<T, E | "Unknown server error">> {
+    try {
+        let headers: HeadersInit = {};
+        if (token) headers = { ...headers, Authorization: token };
+        const result = await fetch(apiBaseUrl() + endpoint, { method: "DELETE", headers });
+        return (await result.json()) as ApiResponse<T, E | "Unknown server error">;
+    } catch (e) {
+        error(`DELETE request /api/${endpoint} failed`, e);
         return { success: false, error: "Unknown server error" };
     }
 }
@@ -188,5 +230,37 @@ export class Api {
             console.log(e);
             return { success: false, error: "Could not get completion" };
         }
+    }
+
+    static async getCollections(adminToken: string) {
+        return apiGet<Collection[]>("collections", adminToken);
+    }
+
+    static async getCollection(adminToken: string, id: string) {
+        return apiGet<Collection>("collections/" + encodeURIComponent(id), adminToken);
+    }
+
+    static async setCollection(adminToken: string, collection: Collection) {
+        return apiPost<Collection, "Duplicate collection name">("collections", collection, adminToken);
+    }
+
+    static async deleteCollection(adminToken: string, id: string) {
+        return apiDelete<void>("collections/" + encodeURIComponent(id), adminToken);
+    }
+
+    static async getSources(adminToken: string, collectionId: string) {
+        return apiGet<Source[]>("collections/" + encodeURIComponent(collectionId) + "/sources", adminToken);
+    }
+
+    static async getSource(adminToken: string, id: string) {
+        return apiGet<Source>("sources/" + encodeURIComponent(id), adminToken);
+    }
+
+    static async setSource(adminToken: string, source: Source) {
+        return apiPost<Source, "Duplicate source name">("sources", source, adminToken);
+    }
+
+    static async deleteSource(adminToken: string, id: string) {
+        return apiDelete<void>("sources/" + encodeURIComponent(id), adminToken);
     }
 }

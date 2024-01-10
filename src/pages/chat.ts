@@ -208,7 +208,7 @@ export class ChatPage extends BaseElement {
         return html`<main class="w-screen max-h-screen h-screen overflow-auto flex flex-col">
             <div id="scrollContainer" class="flex-1 w-full flex flex-col items-center overflow-auto">
                 <div class="sticky top-0 flex items-center justify-between z-10 h-14 w-full max-w-[640px] p-2 font-semibold bg-background">
-                    <span class="text-lg pl-2">Doxie</span>
+                    <a href="/" class="text-lg pl-2">Doxie</a>
                     <theme-toggle class="ml-auto"></theme-toggle>
                 </div>
                 ${this.isConnecting ? html`<div>Connecting</div>` : nothing}

@@ -78,7 +78,6 @@ export class Rag {
         const chroma = new ChromaClient({ path: "http://chroma:8000" });
         const start = performance.now();
         let connectedToChroma = false;
-        console.log("Connecting to Chroma");
         while (performance.now() - start < 10 * 1000) {
             try {
                 const version = await chroma.version();

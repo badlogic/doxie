@@ -2,24 +2,34 @@ import * as chokidar from "chokidar";
 import compression from "compression";
 import cors from "cors";
 import express, { Request, Response } from "express";
-import { body, header, validationResult } from "express-validator";
+import { body, header, param, validationResult } from "express-validator";
 import * as fs from "fs";
 import * as http from "http";
 import multer from "multer";
 import WebSocket, { WebSocketServer } from "ws";
-import { EmbedderDocument, EmbedderDocumentSegment } from "../common/api";
+import { Collection, Source } from "../common/api";
 import { ErrorReason } from "../common/errors";
-import { Embedder } from "./embedder";
 import { ChatSessions } from "./chatsessions";
-import { ChromaClient, IEmbeddingFunction } from "chromadb";
+import { Database } from "./database";
+import { Embedder } from "./embedder";
 import { Rag } from "./rag";
 
 const upload = multer({ storage: multer.memoryStorage() });
 
 const port = process.env.PORT ?? 3333;
-const openaiKey = process.env.OPENAI_KEY;
+const openaiKey = process.env.DOXIE_OPENAI_KEY;
 if (!openaiKey) {
-    console.error("Please specify the OPENAI_KEY env var");
+    console.error("Please specify the DOXIE_OPENAI_KEY env var");
+    process.exit(-1);
+}
+const adminToken = process.env.DOXIE_ADMIN_TOKEN;
+if (!adminToken) {
+    console.error("Please specify the DOXIE_ADMIN_TOKEN env var");
+    process.exit(-1);
+}
+const dbPassword = process.env.DOXIE_DB_PASSWORD;
+if (!dbPassword) {
+    console.error("Please specify the DOXIE_DB_PASSWORD env var");
     process.exit(-1);
 }
 
@@ -40,14 +50,17 @@ function logError(endpoint: string, message: string, e: any) {
         fs.mkdirSync("docker/data");
     }
 
-    await Rag.waitForChroma();
+    await Promise.all([Rag.waitForChroma(), Database.waitForMongo()]);
     const embedder = new Embedder(openaiKey);
     const rag = new Rag(embedder);
-    const berufsLexikonFile = "docker/data/berufslexikon.embeddings.bin";
-    const berufsLexikon = await rag.loadCollection("berufslexikon", berufsLexikonFile);
-    const spineFile = "docker/data/spine.embeddings.bin";
-    const spine = await rag.loadCollection("spine", spineFile);
-    const sessions = new ChatSessions(openaiKey, [berufsLexikon, spine]);
+    const database = new Database();
+    const sessions = new ChatSessions(openaiKey, []);
+
+    // const berufsLexikonFile = "docker/data/berufslexikon.embeddings.bin";
+    // const spineFile = "docker/data/spine.embeddings.bin";
+    // const berufsLexikon = await rag.loadCollection("berufslexikon", berufsLexikonFile);
+    // const spine = await rag.loadCollection("spine", spineFile);
+    // const sessions = new ChatSessions(openaiKey, [berufsLexikon, spine]);
 
     const app = express();
     app.set("json spaces", 2);
@@ -55,6 +68,145 @@ function logError(endpoint: string, message: string, e: any) {
     app.use(compression());
     app.use(express.json());
     app.set("trust proxy", true);
+
+    app.get("/api/collections", [header("authorization").notEmpty().isString()], async (req: Request, res: Response) => {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
+        try {
+            const token = req.headers.authorization!;
+            if (token != adminToken) throw new Error("Inavlid admin token");
+            apiSuccess<Collection[]>(res, await database.getCollections());
+        } catch (e) {
+            logError(req.path, "Could not get collections", e);
+            apiError(res, "Could get collections");
+        }
+    });
+
+    app.get(
+        "/api/collections/:id",
+        [header("authorization").notEmpty().isString(), param("id").notEmpty().isString()],
+        async (req: Request, res: Response) => {
+            const errors = validationResult(req);
+            if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
+            try {
+                const token = req.headers.authorization!;
+                if (token != adminToken) throw new Error("Inavlid admin token");
+                const id = req.params.id as string;
+                apiSuccess<Collection>(res, await database.getCollection(id));
+            } catch (e) {
+                const error = "Could not get collection " + req.query.id;
+                logError(req.path, error, e);
+                apiError(res, error);
+            }
+        }
+    );
+
+    app.delete(
+        "/api/collections/:id",
+        [header("authorization").notEmpty().isString(), param("id").notEmpty().isString()],
+        async (req: Request, res: Response) => {
+            const errors = validationResult(req);
+            if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
+            try {
+                const token = req.headers.authorization!;
+                if (token != adminToken) throw new Error("Inavlid admin token");
+                const id = req.params.id as string;
+                await database.deleteCollection(id);
+                apiSuccess(res);
+            } catch (e) {
+                const error = "Could not delete collection " + req.query.id;
+                logError(req.path, error, e);
+                apiError(res, error);
+            }
+        }
+    );
+
+    app.post("/api/collections", [header("authorization").notEmpty().isString()], async (req: Request, res: Response) => {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
+        try {
+            const token = req.headers.authorization!;
+            if (token != adminToken) throw new Error("Inavlid admin token");
+            const collection = req.body as Collection;
+            apiSuccess<Collection>(res, await database.setCollection(collection));
+        } catch (e) {
+            const error = "Could not update collection " + req.body._id;
+            logError(req.path, error, e);
+            apiError(res, error);
+        }
+    });
+
+    app.get(
+        "/api/collections/:id/sources",
+        [header("authorization").notEmpty().isString(), param("id").notEmpty().isString()],
+        async (req: Request, res: Response) => {
+            const errors = validationResult(req);
+            if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
+            try {
+                const token = req.headers.authorization!;
+                if (token != adminToken) throw new Error("Inavlid admin token");
+                apiSuccess<Source[]>(res, await database.getSources(req.params.id));
+            } catch (e) {
+                const error = "Could not get sources of collection " + req.params.id;
+                logError(req.path, error, e);
+                apiError(res, error);
+            }
+        }
+    );
+
+    app.get(
+        "/api/sources/:id",
+        [header("authorization").notEmpty().isString(), param("id").notEmpty().isString()],
+        async (req: Request, res: Response) => {
+            const errors = validationResult(req);
+            if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
+            try {
+                const token = req.headers.authorization!;
+                if (token != adminToken) throw new Error("Inavlid admin token");
+                const id = req.params.id as string;
+                apiSuccess<Source>(res, await database.getSource(id));
+            } catch (e) {
+                const error = "Could not get source " + req.params.id;
+                logError(req.path, error, e);
+                apiError(res, error);
+            }
+        }
+    );
+
+    app.delete(
+        "/api/sources/:id",
+        [header("authorization").notEmpty().isString(), param("id").notEmpty().isString()],
+        async (req: Request, res: Response) => {
+            const errors = validationResult(req);
+            if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
+            try {
+                const token = req.headers.authorization!;
+                if (token != adminToken) throw new Error("Inavlid admin token");
+                const id = req.params.id as string;
+                await database.deleteSource(id);
+                apiSuccess(res);
+            } catch (e) {
+                const error = "Could not delete collection " + req.query.id;
+                logError(req.path, error, e);
+                apiError(res, error);
+            }
+        }
+    );
+
+    app.post("/api/sources", [header("authorization").notEmpty().isString()], async (req: Request, res: Response) => {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
+        try {
+            const token = req.headers.authorization!;
+            if (token != adminToken) throw new Error("Inavlid admin token");
+            const source = req.body as Source;
+            apiSuccess<Source>(res, await database.setSource(source));
+        } catch (e) {
+            const error = "Could not update source " + req.body._id;
+            logError(req.path, error, e);
+            apiError(res, error);
+        }
+    });
 
     app.post("/api/createSession", [body("collection").notEmpty().isString()], async (req: Request, res: Response) => {
         const errors = validationResult(req);

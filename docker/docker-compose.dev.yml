@@ -9,7 +9,6 @@ services:
             - 3333:3333
         environment:
             - DEV=true
-
-    #unstructured-api:
-    #    ports:
-    #        - "8000:8000"
+    mongodb:
+        ports:
+            - 27017:27017
