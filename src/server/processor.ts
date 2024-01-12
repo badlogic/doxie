@@ -1,12 +1,48 @@
 import * as fs from "fs";
 import { Database } from "./database";
 import { Rag } from "./rag";
-import { ProcessingJob } from "../common/api";
+import { BaseSource, EmbedderDocument, FaqSource, FlarumSource, ProcessingJob, SitemapSource } from "../common/api";
 import { Collection as MongoCollection, ObjectId, Document } from "mongodb";
-import { sleep } from "../utils/utils";
+import { assertNever, sleep } from "../utils/utils";
+import { FaqSourceElement } from "../pages";
+
+abstract class BaseProcessor<T extends BaseSource> {
+    constructor(readonly job: ProcessingJob, readonly processor: Processor, readonly source: T) {}
+
+    abstract process(): Promise<EmbedderDocument[]>;
+}
+
+class FaqProccessor extends BaseProcessor<FaqSource> {
+    async process(): Promise<EmbedderDocument[]> {
+        const documents: EmbedderDocument[] = [];
+        await this.processor.log(this.job, "Processing " + this.source.faqs.length + " FAQ entries");
+        for (const entry of this.source.faqs) {
+            documents.push({
+                uri: "faq://" + this.source._id,
+                text: entry.questions + "\n\n" + entry.answer,
+                title: this.source.name + " " + entry.id,
+                segments: [],
+            });
+        }
+        await this.processor.log(this.job, "Done");
+        return documents;
+    }
+}
+
+class FlarumProccessor extends BaseProcessor<FlarumSource> {
+    process(): Promise<EmbedderDocument[]> {
+        throw new Error("Method not implemented.");
+    }
+}
+
+class SitemapProccessor extends BaseProcessor<SitemapSource> {
+    process(): Promise<EmbedderDocument[]> {
+        throw new Error("Method not implemented.");
+    }
+}
 
 class Processor {
-    constructor(private jobs: MongoCollection<Document>) {}
+    constructor(private jobs: MongoCollection<Document>, readonly database: Database) {}
 
     async getNextJob(): Promise<ProcessingJob | undefined> {
         let job = (await this.jobs.findOneAndUpdate(
@@ -47,14 +83,28 @@ class Processor {
                 if (job) {
                     try {
                         console.log("Got job " + JSON.stringify(job, null, 2));
-                        for (let i = 0; i < 30; i++) {
-                            await this.log(job, "Doing stuff " + i);
-                            const status = await this.checkJobStatus(job._id!);
-                            if (status == "stopped") {
-                                throw new Error("Job stopped by user");
+
+                        const source = await this.database.getSource(job.sourceId);
+                        console.log("Fetched source");
+
+                        const docs: EmbedderDocument[] = [];
+                        switch (source.type) {
+                            case "faq": {
+                                docs.push(...(await new FaqProccessor(job, this, source).process()));
+                                break;
                             }
-                            await sleep(1000);
+                            case "flarum": {
+                                docs.push(...(await new FlarumProccessor(job, this, source).process()));
+                                break;
+                            }
+                            case "sitemap": {
+                                docs.push(...(await new SitemapProccessor(job, this, source).process()));
+                                break;
+                            }
+                            default:
+                                assertNever(source);
                         }
+
                         await this.finishJob(job._id!, true);
                     } catch (e) {
                         let message = "";
@@ -104,6 +154,6 @@ if (!dbPassword) {
     await Database.jobs!.updateMany({ state: "running" }, { $set: { state: "stopped", finishedAt: Date.now() } });
     const db = new Database();
     const jobs = Database.jobs!;
-    const processor = new Processor(jobs);
+    const processor = new Processor(jobs, db);
     processor.process();
 })();
