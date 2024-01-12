@@ -83,7 +83,7 @@ export class AdminPage extends BaseElement {
             ${renderTopbar("Admin", closeButton())}
             <div class="${pageContentStyle} px-4 gap-4">
                 <div class="flex">
-                    <h1>Collections</h1>
+                    <h1>${i18n("Collections")}</h1>
                     <a href="collections/new" class="ml-auto self-start flex px-2 py-1 items-center gap-1 hover:text-primary">
                         <i class="icon w-5 h-5">${addIcon}</i><span>${i18n("New")}</span>
                     </a>
@@ -97,7 +97,7 @@ export class AdminPage extends BaseElement {
                         )}" class="px-4 py-2 flex flex-col gap-2 border border-divider rounded-md underline-none hover:border-primary">
                             <div class="flex">
                                 <span class="font-semibold">${collection.name}</span>
-                                <button class="ml-auto hover:text-primary" @click=${(ev: Event) =>
+                                <button class="ml-auto hover:text-primary w-6 h-6 flex items-center justify-center" @click=${(ev: Event) =>
                                     this.deleteCollection(ev, collection)}><i class="icon w-5 h-5">${deleteIcon}</i></button>
                             </div>
                             <div class="line-clamp-2">${collection.description}</div>

@@ -4,7 +4,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { pageContainerStyle, pageContentStyle } from "../utils/styles.js";
 import { Store } from "../utils/store.js";
 import { i18n } from "../utils/i18n.js";
-import { Api, Collection, FaqSource, FlarumSource, Source } from "../common/api.js";
+import { Api, Collection, FaqSource, FlarumSource, ProcessingJob, Source } from "../common/api.js";
 import { addIcon, deleteIcon, plusIcon } from "../utils/icons.js";
 import { router } from "../utils/routing.js";
 import { appState } from "../appstate.js";
@@ -25,6 +25,9 @@ export class CollectionPage extends BaseElement {
     @state()
     sources: Source[] = [];
 
+    @state()
+    jobs: Map<string, ProcessingJob> = new Map();
+
     isNew = false;
 
     constructor() {
@@ -37,39 +40,68 @@ export class CollectionPage extends BaseElement {
             this.isLoading = false;
         } else {
             if (adminToken && id) {
-                this.getCollection(adminToken, id);
+                this.getData(adminToken, id);
             }
         }
 
         appState.subscribe("source", () => {
-            const id = router.getCurrentParams()?.get("id");
-            const adminToken = Store.getAdminToken();
             if (adminToken && id) {
-                this.getCollection(adminToken, id);
+                this.getData(adminToken, id);
             }
         });
     }
 
-    async getCollection(adminToken: string, id: string) {
+    async getData(adminToken: string, id: string) {
         this.isLoading = true;
         try {
             const collections = await Api.getCollection(adminToken, id);
             if (!collections.success) {
                 this.error = i18n("Could not load collection");
+                return;
             } else {
                 this.collection = collections.data;
             }
             const sources = await Api.getSources(adminToken, id);
             if (!sources.success) {
                 this.error = i18n("Could not load collection");
+                return;
             } else {
                 this.sources = sources.data;
             }
+            await this.getJobs(adminToken);
         } catch (e) {
             console.error(e);
             this.error = i18n("Could not load collection");
         } finally {
             this.isLoading = false;
+        }
+    }
+
+    timeoutId: any = -1;
+    connectedCallback(): void {
+        super.connectedCallback();
+        const updateJobs = () => {
+            this.getJobs(Store.getAdminToken()!);
+            this.timeoutId = setTimeout(updateJobs, 2000);
+        };
+        updateJobs();
+    }
+
+    disconnectedCallback(): void {
+        super.disconnectedCallback();
+        clearTimeout(this.timeoutId);
+    }
+
+    async getJobs(adminToken: string) {
+        if (!adminToken) return;
+        for (const source of this.sources) {
+            const jobs = await Api.getJob(adminToken, source._id!);
+            if (!jobs.success) {
+                this.error = i18n("Could not load collection");
+            } else {
+                if (jobs.data) this.jobs.set(source._id!, jobs.data);
+            }
+            this.requestUpdate();
         }
     }
 
@@ -109,7 +141,7 @@ export class CollectionPage extends BaseElement {
                     .value=${collection.name}
                     @input=${() => this.handleInput()}
                 />
-                <span class="self-start text-xs text-muted-fg font-semibold -mb-4 ml-2 b g-background z-[5] px-1">${i18n("Description")}</span>
+                <span class="self-start text-xs text-muted-fg font-semibold -mb-4 ml-2 bg-background z-[5] px-1">${i18n("Description")}</span>
                 <textarea
                     id="description"
                     class="textfield py-3"
@@ -137,6 +169,7 @@ export class CollectionPage extends BaseElement {
                                   .values=${[
                                       { label: "Flarum", value: "flarum" },
                                       { label: "FAQ", value: "faq" },
+                                      { label: "Sitemap", value: "sitemap" },
                                   ]}
                                   .onSelected=${(sourceType: { value: string; label: string }) => this.addSource(sourceType)}
                               >
@@ -145,22 +178,99 @@ export class CollectionPage extends BaseElement {
                           <div class="flex flex-col gap-4 mb-4">
                               ${map(
                                   sources,
-                                  (source) => html`<a href="/sources/${encodeURIComponent(
-                                      collection._id ?? ""
-                                  )}" class="px-4 py-2 flex flex-col gap-2 border border-divider rounded-md underline-none hover:border-primary">
-                            <div class="flex">
-                                <span class="font-semibold">${source.name}</span>
-                                <span class="ml-2 border border-divider border-md rounded-md px-1">${source.type}</span>
-                                <button class="ml-auto hover:text-primary" @click=${(ev: Event) =>
-                                    this.deleteSource(ev, source)}><i class="icon w-5 h-5">${deleteIcon}</i></button>
-                            </div>
-                            <div class="line-clamp-2">${source.description}</div>
-                        </div>`
+                                  (source) => html`<div
+                                      class="flex flex-col gap-2 border border-divider rounded-md underline-none hover:border-primary"
+                                  >
+                                      <a href="/sources/${encodeURIComponent(source._id ?? "")}">
+                                          <div class="flex px-2 py-2">
+                                              <span class="rounded-md px-1 bg-green-600 font-semibold">${source.type}</span>
+                                              <span class="ml-2 font-semibold">${source.name}</span>
+                                              <button
+                                                  class="ml-auto hover:text-primary w-6 h-6 flex items-center justify-center"
+                                                  @click=${(ev: Event) => this.deleteSource(ev, source)}
+                                              >
+                                                  <i class="icon w-5 h-5">${deleteIcon}</i>
+                                              </button>
+                                          </div>
+                                          ${source.description.trim().length > 0
+                                              ? html`<div class="line-clamp-2 px-2">${source.description}</div>`
+                                              : nothing}
+                                      </a>
+                                      ${this.renderJobState(source)}
+                                  </div>`
                               )}
                           </div>`
                     : nothing}
             </div>
         </div>`;
+    }
+
+    renderJobState(source: Source) {
+        const process = async (ev: Event, stop: boolean) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            const job = stop
+                ? await Api.stopProcessingSource(Store.getAdminToken()!, source._id!)
+                : await Api.processSource(Store.getAdminToken()!, source._id!);
+            if (!job.success) {
+                alert("Could not start processing");
+                return;
+            }
+            if (job.data) this.jobs.set(source._id!, job.data);
+            else this.jobs.delete(source._id!);
+            this.requestUpdate();
+        };
+
+        if (this.jobs.has(source._id!)) {
+            const job = this.jobs.get(source._id!)!;
+            const toggleLogs = (ev: Event) => {
+                ev.preventDefault();
+                ev.stopPropagation();
+                const target = ev.target as HTMLElement;
+                target.parentElement?.parentElement?.querySelector<HTMLDivElement>("#logs")?.classList.toggle("hidden");
+            };
+            const logs = job.log.length > 0 ? html`<div class="w-full flex flex-col"></div>` : nothing;
+
+            let status = "";
+            let color = "";
+            let action = i18n("Process");
+            let stop = false;
+            switch (job.state) {
+                case "running":
+                    status = i18n("Processing");
+                    color = "text-green-400";
+                    action = i18n("Stop");
+                    stop = true;
+                    break;
+                case "waiting":
+                    status = i18n("Waiting for processing");
+                    color = "text-yellow-400";
+                    action = i18n("Stop");
+                    stop = true;
+                    break;
+                case "succeeded":
+                    status = i18n("Processing succeeded")(job.finishedAt);
+                    color = "text-green-400";
+                    break;
+                case "failed":
+                    status = i18n("Processing failed")(job.finishedAt);
+                    color = "text-red-400";
+                    break;
+                case "stopped":
+                    status = i18n("Processing stopped by user")(job.finishedAt);
+            }
+
+            return html`<div class="flex flex-col gap-2">
+                <div class="flex gap-2 items-center px-2 mb-2">
+                    <button class="self-start button" @click=${(ev: Event) => process(ev, stop)}>${action}</button>
+                    <button class="self-start button" @click=${toggleLogs}>${i18n("Logs")}</button>
+                    <span class="${color} font-semibold text-sm">${status}</span>
+                </div>
+                <div id="logs" class="hidden debug hljs -mt-2 p-4 whitespace-pre-wrap min-h-80 max-h-80">${job.log}</div>
+            </div>`;
+        } else {
+            return html`<button class="self-start button mx-2 mb-2" @click=${(ev: Event) => process(ev, false)}>${i18n("Process")}</button>`;
+        }
     }
 
     handleInput() {
@@ -216,167 +326,5 @@ export class CollectionPage extends BaseElement {
                 router.replace("/collections/" + this.collection._id);
             }
         }
-    }
-}
-
-@customElement("source-page")
-export class SourcePage extends BaseElement {
-    @property()
-    source?: Source;
-
-    @state()
-    isLoading = true;
-
-    @state()
-    error?: string;
-
-    isNew = false;
-
-    constructor() {
-        super();
-        const adminToken = Store.getAdminToken();
-        if (!adminToken) router.popAll("/");
-        const id = router.getCurrentParams()?.get("id");
-        const type = router.getCurrentParams()?.get("type");
-
-        if (!id) {
-            this.error = i18n("Could not load source");
-            return;
-        }
-
-        if (type) {
-            this.isNew = true;
-            this.isLoading = false;
-            this.source = this.createNewSource(id, type as Source["type"]);
-        } else {
-            if (adminToken && id) {
-                this.getSource(adminToken, id);
-            }
-        }
-    }
-
-    createNewSource(collectionId: string, type: Source["type"]) {
-        switch (type) {
-            case "faq": {
-                const source: FaqSource = { type: "faq", collectionId, name: "", description: "", faqs: [] };
-                return source;
-            }
-            case "flarum": {
-                const source: FlarumSource = { type: "flarum", collectionId, name: "", description: "", apiUrl: "", staff: [] };
-                return source;
-            }
-            default:
-                assertNever(type);
-        }
-    }
-
-    async getSource(adminToken: string, id: string) {
-        this.isLoading = true;
-        try {
-            const source = await Api.getSource(adminToken, id);
-            if (!source.success) {
-                this.error = i18n("Could not load source");
-            } else {
-                this.source = source.data;
-            }
-        } catch (e) {
-            console.error(e);
-            this.error = i18n("Could not load source");
-        } finally {
-            this.isLoading = false;
-        }
-    }
-
-    getSourceElement(source: Source) {
-        const type = source.type;
-        switch (type) {
-            case "flarum":
-                return html`<flarum-source .source=${this.source}></flarum-source>`;
-            case "faq":
-                return html`<faq-source .source=${this.source}></faq-source>`;
-            default:
-                assertNever(type);
-        }
-    }
-
-    render() {
-        const source = this.source;
-        if (!source) {
-            return html`<div class="${pageContainerStyle}">
-                ${renderTopbar(i18n("Source"), closeButton())}
-                <div class="${pageContentStyle} px-4 gap-2"></div>
-            </div>`;
-        }
-
-        const topBar = renderTopbar(
-            i18n("Source"),
-            closeButton(),
-            html`<button id="save" class="ml-auto button" ?disabled=${!this.canSave(source)} @click=${() => this.save()}>${i18n("Save")}</button>`
-        );
-        return html`<div class="${pageContainerStyle}">
-            ${topBar}
-            <div class="${pageContentStyle} px-4 gap-2">
-                <span class="self-start text-xs text-muted-fg font-semibold -mb-4 ml-2 bg-background z-[5] px-1">${i18n("Name")}</span>
-                <input
-                    id="name"
-                    class="textfield pt-2 ${source.name.length == 0 ? "border-red-500" : ""}"
-                    .value=${source.name}
-                    @input=${() => this.handleInput()}
-                />
-                <span class="self-start text-xs text-muted-fg font-semibold -mb-4 ml-2 bg-background z-[5] px-1">${i18n("Description")}</span>
-                <textarea id="description" class="textfield py-3" .value=${source.description} rows="5" @input=${() => this.handleInput()}></textarea>
-                ${this.getSourceElement(source)}
-            </div>
-        </div>`;
-    }
-
-    handleInput() {
-        const name = this.querySelector<HTMLInputElement>("#name")!.value.trim();
-        const description = this.querySelector<HTMLTextAreaElement>("#description")!.value.trim();
-
-        const source = this.source;
-        if (!source) return;
-        source.name = name;
-        source.description = description;
-        this.source = { ...source };
-        this.requestUpdate();
-    }
-
-    canSave(source?: Source) {
-        if (!source) return false;
-        return source.name.trim().length >= 3;
-    }
-
-    async save() {
-        if (!this.source) return;
-        const result = await Api.setSource(Store.getAdminToken()!, this.source);
-        if (!result.success) {
-            if (result.error == "Duplicate source name") {
-                this.error = i18n("Source with this name already exists");
-            } else {
-                this.error = i18n("Could not save collection");
-                this.requestUpdate();
-            }
-        } else {
-            this.source = result.data;
-            appState.update("source", this.source, this.source._id);
-            if (this.isNew) {
-                router.replace("/sources/" + this.source._id);
-            }
-        }
-    }
-}
-
-@customElement("faq-source")
-export class FaqSourceElement extends BaseElement {
-    render() {
-        return html`<div>Faq source</div>`;
-    }
-}
-
-@customElement("flarum-source")
-export class FlarumSourceElement extends BaseElement {
-    render() {
-        return html`<div>Flarum source</div>`;
     }
 }

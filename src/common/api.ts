@@ -1,7 +1,7 @@
 import { error } from "../utils/utils.js";
 import { ErrorReason } from "./errors.js";
 
-export type Source = FlarumSource | FaqSource;
+export type Source = FlarumSource | FaqSource | SitemapSource;
 
 export interface BaseSource {
     _id?: string;
@@ -16,9 +16,23 @@ export interface FlarumSource extends BaseSource {
     staff: string[];
 }
 
+export interface FaqSourceEntry {
+    id: string;
+    questions: string;
+    answer: string;
+    relatedUrls: string[];
+}
+
 export interface FaqSource extends BaseSource {
     type: "faq";
-    faqs: { question: string; answer: string; relatedUrls: string[] }[];
+    faqs: FaqSourceEntry[];
+}
+
+export interface SitemapSource extends BaseSource {
+    type: "sitemap";
+    url: string;
+    excluded: string[];
+    included: string[];
 }
 
 export interface Collection {
@@ -26,6 +40,16 @@ export interface Collection {
     name: string;
     description: string;
     systemPrompt: string;
+}
+
+export interface ProcessingJob {
+    _id?: string;
+    sourceId: string;
+    createdAt: number;
+    startedAt: number;
+    finishedAt: number;
+    log: string;
+    state: "waiting" | "running" | "succeeded" | "failed" | "stopped";
 }
 
 export interface EmbedderDocumentSegment {
@@ -262,5 +286,28 @@ export class Api {
 
     static async deleteSource(adminToken: string, id: string) {
         return apiDelete<void>("sources/" + encodeURIComponent(id), adminToken);
+    }
+
+    static async getJob(adminToken: string, sourceId: string) {
+        return apiGet<ProcessingJob | undefined>("sources/" + encodeURIComponent(sourceId) + "/job", adminToken);
+    }
+
+    static async processSource(adminToken: string, sourceId: string) {
+        return apiGet<ProcessingJob>("sources/" + encodeURIComponent(sourceId) + "/process", adminToken);
+    }
+
+    static async stopProcessingSource(adminToken: string, sourceId: string) {
+        return apiGet<ProcessingJob | undefined>("sources/" + encodeURIComponent(sourceId) + "/stopprocessing", adminToken);
+    }
+
+    static async html(url: string) {
+        try {
+            const response = await fetch(apiBaseUrl() + "html?url=" + encodeURIComponent(url));
+            if (!response.ok) return undefined;
+            return await response.text();
+        } catch (e) {
+            console.error("Couldn't fetch html", e);
+            return undefined;
+        }
     }
 }

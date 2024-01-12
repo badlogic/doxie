@@ -11,6 +11,7 @@ const config = {
         spine: "src/server/sources/spine.ts",
         flarum: "src/server/sources/flarum.ts",
         "embedder-cli": "src/server/embedder-cli.ts",
+        processor: "src/server/processor.ts",
     },
     bundle: true,
     sourcemap: true,

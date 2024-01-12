@@ -1,3 +1,5 @@
+import { formatDate, getTimeDifference } from "./utils";
+
 export interface Messages {
     "Whoops, that page doesn't exist": string;
     "Couldn't load mesage": string;
@@ -26,6 +28,26 @@ export interface Messages {
     "Source with this name already exists": string;
     "Are you sure you want to delete source": (name: string) => string;
     "Could not delete source ": (name: string) => string;
+    Entries: string;
+    Questions: string;
+    Answer: string;
+    "Related URLs": string;
+    "New Entry": string;
+    Add: string;
+    Collections: string;
+    "Waiting for processing": string;
+    Processing: string;
+    "Processing failed": (time: number) => string;
+    "Processing succeeded": (time: number) => string;
+    "Processing stopped by user": (time: number) => string;
+    Process: string;
+    Stop: string;
+    Logs: string;
+    "sitemap.xml URL": string;
+    "Included patterns": string;
+    "Excluded patterns": string;
+    Test: string;
+    URLs: string;
 }
 
 const english: Messages = {
@@ -56,6 +78,26 @@ const english: Messages = {
     "Source with this name already exists": "Source with this name already exists",
     "Are you sure you want to delete source": (name: string) => "Are you sure you want to delete source " + name + "?",
     "Could not delete source ": (name: string) => "Could not delete source " + name,
+    Entries: "Entries",
+    Questions: "Questions",
+    Answer: "Answer",
+    "Related URLs": "Related URLs",
+    "New Entry": "New Entry",
+    Add: "Add",
+    Collections: "Collections",
+    "Waiting for processing": "Waiting for processing",
+    Processing: "Processing",
+    "Processing failed": (time: number) => "Failed " + getTimeDifference(new Date(time)) + " ago",
+    "Processing succeeded": (time: number) => "Succeeded " + getTimeDifference(new Date(time)) + " ago",
+    "Processing stopped by user": (time: number) => "Stopped " + getTimeDifference(new Date(time)) + " ago",
+    Process: "Process",
+    Stop: "Stop",
+    Logs: "Logs",
+    "sitemap.xml URL": "sitemap.xml URL",
+    "Included patterns": "Included patterns",
+    "Excluded patterns": "Excluded patterns",
+    Test: "Test",
+    URLs: "URLs",
 };
 
 export type LanguageCode = "en";

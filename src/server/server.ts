@@ -7,12 +7,13 @@ import * as fs from "fs";
 import * as http from "http";
 import multer from "multer";
 import WebSocket, { WebSocketServer } from "ws";
-import { Collection, Source } from "../common/api";
+import { Collection, ProcessingJob, Source } from "../common/api";
 import { ErrorReason } from "../common/errors";
 import { ChatSessions } from "./chatsessions";
 import { Database } from "./database";
 import { Embedder } from "./embedder";
 import { Rag } from "./rag";
+import { Jobs } from "./jobs";
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -55,6 +56,7 @@ function logError(endpoint: string, message: string, e: any) {
     const rag = new Rag(embedder);
     const database = new Database();
     const sessions = new ChatSessions(openaiKey, []);
+    const jobs = new Jobs(database);
 
     // const berufsLexikonFile = "docker/data/berufslexikon.embeddings.bin";
     // const spineFile = "docker/data/spine.embeddings.bin";
@@ -208,6 +210,54 @@ function logError(endpoint: string, message: string, e: any) {
         }
     });
 
+    app.get("/api/sources/:id/job", [header("authorization").notEmpty().isString()], async (req: Request, res: Response) => {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
+        try {
+            const token = req.headers.authorization!;
+            if (token != adminToken) throw new Error("Inavlid admin token");
+            const sourceId = req.params.id as string;
+            const job = await jobs.getJob(sourceId);
+            apiSuccess(res, job);
+        } catch (e) {
+            const error = "Could not get job for source " + req.body._id;
+            logError(req.path, error, e);
+            apiError(res, error);
+        }
+    });
+
+    app.get("/api/sources/:id/process", [header("authorization").notEmpty().isString()], async (req: Request, res: Response) => {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
+        try {
+            const token = req.headers.authorization!;
+            if (token != adminToken) throw new Error("Inavlid admin token");
+            const sourceId = req.params.id as string;
+            const job = await jobs.startJob(sourceId);
+            apiSuccess(res, job);
+        } catch (e) {
+            const error = "Could not process source " + req.body._id;
+            logError(req.path, error, e);
+            apiError(res, error);
+        }
+    });
+
+    app.get("/api/sources/:id/stopprocessing", [header("authorization").notEmpty().isString()], async (req: Request, res: Response) => {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
+        try {
+            const token = req.headers.authorization!;
+            if (token != adminToken) throw new Error("Inavlid admin token");
+            const sourceId = req.params.id as string;
+            const job = await jobs.stopJob(sourceId);
+            apiSuccess(res, job);
+        } catch (e) {
+            const error = "Could not stop processing source " + req.body._id;
+            logError(req.path, error, e);
+            apiError(res, error);
+        }
+    });
+
     app.post("/api/createSession", [body("collection").notEmpty().isString()], async (req: Request, res: Response) => {
         const errors = validationResult(req);
         if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
@@ -253,6 +303,20 @@ function logError(endpoint: string, message: string, e: any) {
             }
         }
     );
+
+    app.get("/api/html", async (req, res) => {
+        try {
+            const url = req.query.url as string;
+            const response = await fetch(url);
+            if (!response.ok) {
+                res.status(400).json({ error: "Couldn't fetch " + url });
+                return;
+            }
+            res.send(await response.text());
+        } catch (e) {
+            res.status(400).json(e);
+        }
+    });
 
     const server = http.createServer(app);
     server.listen(port, async () => {

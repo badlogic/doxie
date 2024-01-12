@@ -9,6 +9,12 @@ services:
             - 3333:3333
         environment:
             - DEV=true
+    processor:
+        ports:
+            - 9231:9231
+            - 3334:3334
+        environment:
+            - DEV=true
     mongodb:
         ports:
             - 27017:27017

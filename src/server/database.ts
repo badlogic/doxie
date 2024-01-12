@@ -1,10 +1,12 @@
 import { Document, MongoClient, Collection as MongoCollection, ObjectId } from "mongodb";
-import { Collection, Source } from "../common/api";
+import { Collection, ProcessingJob, Source } from "../common/api";
 
 export class Database {
+    static client?: MongoClient;
     static collections?: MongoCollection<Document>;
     static sources?: MongoCollection<Document>;
     static documents?: MongoCollection<Document>;
+    static jobs?: MongoCollection<Document>;
 
     static async waitForMongo() {
         const user = "doxie";
@@ -13,12 +15,13 @@ export class Database {
         let connected = false;
         while (performance.now() - start < 10 * 1000) {
             try {
-                const client = new MongoClient(`mongodb://${user}:${password}@mongodb:27017`);
-                await client.connect();
-                const db = await client.db("doxie");
+                this.client = new MongoClient(`mongodb://${user}:${password}@mongodb:27017`);
+                await this.client.connect();
+                const db = await this.client.db("doxie");
                 this.collections = db.collection("collections");
                 this.sources = db.collection("sources");
                 this.documents = db.collection("documents");
+                this.jobs = db.collection("jobs");
                 connected = true;
                 break;
             } catch (e) {
@@ -48,6 +51,7 @@ export class Database {
         if (!collections) throw new Error("Not connected");
         const result = await collections.findOne<Collection>({ _id: new ObjectId(id) });
         if (!result) throw new Error("Collection with id " + id + " does not exist");
+        result._id = (result as any)._id?.toHexString();
         return result;
     }
 
@@ -88,6 +92,7 @@ export class Database {
         if (!sources) throw new Error("Not connected");
         const result = await sources.findOne<Source>({ _id: new ObjectId(id) });
         if (!result) throw new Error("Source with id " + id + " does not exist");
+        result._id = (result as any)._id?.toHexString();
         return result;
     }
 
@@ -114,5 +119,46 @@ export class Database {
         }
 
         return source;
+    }
+
+    async getJobBySource(sourceId: string): Promise<ProcessingJob | null> {
+        const jobs = Database.jobs;
+        if (!jobs) throw new Error("Not connected");
+        const result = await jobs.findOne<ProcessingJob>({ sourceId });
+        return result;
+    }
+
+    async getJob(id: string): Promise<ProcessingJob> {
+        const jobs = Database.jobs;
+        if (!jobs) throw new Error("Not connected");
+        const result = await jobs.findOne<ProcessingJob>({ _id: new ObjectId(id) });
+        if (!result) throw new Error("Job with id " + id + " does not exist");
+        result._id = (result as any)._id?.toHexString();
+        return result;
+    }
+
+    async deleteJob(id: string): Promise<void> {
+        const sources = Database.jobs;
+        if (!sources) throw new Error("Not connected");
+        const result = await sources.deleteOne({ _id: new ObjectId(id) });
+        if (!result.deletedCount) throw new Error("Job with id " + id + " does not exist");
+    }
+
+    async setJob(job: ProcessingJob): Promise<ProcessingJob> {
+        const jobs = Database.jobs;
+        if (!jobs) throw new Error("Not connected");
+
+        if (job._id && ObjectId.isValid(job._id)) {
+            (job as any)._id = new ObjectId(job._id);
+        }
+
+        if (!job._id) {
+            const result = await jobs.insertOne(job as any);
+            job._id = result.insertedId.toHexString();
+        } else {
+            await jobs.updateOne({ _id: new ObjectId(job._id) }, { $set: job });
+        }
+
+        return job;
     }
 }

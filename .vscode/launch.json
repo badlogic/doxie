@@ -13,6 +13,17 @@
             "continueOnAttach": true
         },
         {
+            "name": "processor",
+            "type": "node",
+            "port": 9231,
+            "request": "attach",
+            "address": "localhost",
+            "localRoot": "${workspaceFolder}/build",
+            "remoteRoot": "/app/build",
+            "restart": true,
+            "continueOnAttach": true
+        },
+        {
             "type": "chrome",
             "request": "launch",
             "name": "client",

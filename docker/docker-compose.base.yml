@@ -17,10 +17,29 @@ services:
     server:
         build:
             context: .
-            dockerfile: Dockerfile
+            dockerfile: Dockerfile.server
         stop_grace_period: 0s
         environment:
             PORT: 3333
+            DOXIE_OPENAI_KEY: ${DOXIE_OPENAI_KEY}
+            DOXIE_DB_PASSWORD: ${DOXIE_DB_PASSWORD}
+            DOXIE_ADMIN_TOKEN: ${DOXIE_ADMIN_TOKEN}
+        volumes:
+            - ./data:/data
+            - ../:/app
+        links:
+            - chroma
+            - mongodb
+        networks:
+            - network
+
+    processor:
+        build:
+            context: .
+            dockerfile: Dockerfile.processor
+        stop_grace_period: 0s
+        environment:
+            PORT: 3334
             DOXIE_OPENAI_KEY: ${DOXIE_OPENAI_KEY}
             DOXIE_DB_PASSWORD: ${DOXIE_DB_PASSWORD}
             DOXIE_ADMIN_TOKEN: ${DOXIE_ADMIN_TOKEN}
