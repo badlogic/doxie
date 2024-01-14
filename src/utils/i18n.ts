@@ -48,6 +48,13 @@ export interface Messages {
     "Excluded patterns": string;
     Test: string;
     URLs: string;
+    "Could not load job": string;
+    Docs: string;
+    Chat: string;
+    "Could not load source documents": string;
+    tokens: string;
+    "Search query ...": string;
+    Top: string;
 }
 
 const english: Messages = {
@@ -98,6 +105,13 @@ const english: Messages = {
     "Excluded patterns": "Excluded patterns",
     Test: "Test",
     URLs: "URLs",
+    "Could not load job": "Could not load job",
+    Docs: "Docs",
+    Chat: "Chat",
+    "Could not load source documents": "Could not load source documents",
+    tokens: "tokens",
+    "Search query ...": "Search query ...",
+    Top: "Top",
 };
 
 export type LanguageCode = "en";

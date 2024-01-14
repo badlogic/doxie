@@ -3,6 +3,8 @@ import { ErrorReason } from "./errors.js";
 
 export type Source = FlarumSource | FaqSource | SitemapSource;
 
+export type Logger = (message: string) => Promise<void>;
+
 export interface BaseSource {
     _id?: string;
     collectionId: string;
@@ -66,6 +68,18 @@ export interface EmbedderDocument {
     text: string;
     embedding?: number[];
     segments: EmbedderDocumentSegment[];
+}
+
+export interface VectorMetadata {
+    sourceId: string;
+    docUri: string;
+    docTitle: string;
+    index: number;
+    tokenCount: number;
+}
+
+export interface VectorDocument extends VectorMetadata {
+    text: string;
 }
 
 export interface JsonValue {
@@ -169,7 +183,8 @@ export class Api {
 
     static async complete(
         sessionId: string,
-        collection: string,
+        collectionId: string,
+        sourceId: string | undefined,
         message: string,
         chunkCb: (chunk: string, type: "text" | "debug", done: boolean) => void
     ): Promise<ApiResponse<void, "Could not get completion">> {
@@ -180,7 +195,7 @@ export class Api {
                     "Content-Type": "application/json",
                     Authorization: sessionId,
                 },
-                body: JSON.stringify({ message, collection }),
+                body: JSON.stringify({ message, collectionId, sourceId }),
             });
             if (!response.ok) return { success: false, error: "Could not get completion" };
             if (!response.body) return { success: false, error: "Unknown server error" };
@@ -298,6 +313,28 @@ export class Api {
 
     static async stopProcessingSource(adminToken: string, sourceId: string) {
         return apiGet<ProcessingJob | undefined>("sources/" + encodeURIComponent(sourceId) + "/stopprocessing", adminToken);
+    }
+
+    static async getDocuments(adminToken: string, collectionId: string, sourceId: string, offset: number, limit: number) {
+        return apiGet<VectorDocument[]>(
+            "documents/" +
+                encodeURIComponent(collectionId) +
+                "/" +
+                encodeURIComponent(sourceId) +
+                `?offset=${encodeURIComponent(offset)}&limit=${encodeURIComponent(limit)}`,
+            adminToken
+        );
+    }
+
+    static async queryDocuments(adminToken: string, collectionId: string, sourceId: string, query: string, k: number = 5) {
+        return apiGet<VectorDocument[]>(
+            "documents/" +
+                encodeURIComponent(collectionId) +
+                "/" +
+                encodeURIComponent(sourceId) +
+                `/query?query=${encodeURIComponent(query)}&k=${encodeURIComponent(k)}`,
+            adminToken
+        );
     }
 
     static async html(url: string) {

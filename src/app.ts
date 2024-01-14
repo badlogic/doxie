@@ -38,12 +38,12 @@ export class App extends LitElement {
             () => "Settings"
         );
         router.addRoute(
-            "/chat",
+            "/chat/:collection",
             () => html`<chat-page></chat-page>`,
             () => "Chat"
         );
         router.addRoute(
-            "/chat/:collection",
+            "/chat/:collection/:source",
             () => html`<chat-page></chat-page>`,
             () => "Chat"
         );
@@ -56,19 +56,25 @@ export class App extends LitElement {
         router.addRoute(
             "/collections/:id",
             () => html`<collection-page></collection-page>`,
-            () => "Collection"
+            () => i18n("Collection")
         );
 
         router.addRoute(
             "/sources/:id",
             () => html`<source-page></source-page>`,
-            () => "Source"
+            () => i18n("Source")
         );
 
         router.addRoute(
             "/sources/:id/:type",
             () => html`<source-page></source-page>`,
-            () => "Source"
+            () => i18n("Source")
+        );
+
+        router.addRoute(
+            "/documents/:id",
+            () => html`<documents-page></documents-page>`,
+            () => i18n("Docs")
         );
 
         router.setRootRoute("/");

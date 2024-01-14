@@ -7,10 +7,6 @@ let watch = process.argv.length >= 3 && process.argv[2] == "--watch";
 const config = {
     entryPoints: {
         server: "src/server/server.ts",
-        berufslexikon: "src/server/sources/berufslexikon.ts",
-        spine: "src/server/sources/spine.ts",
-        flarum: "src/server/sources/flarum.ts",
-        "embedder-cli": "src/server/embedder-cli.ts",
         processor: "src/server/processor.ts",
     },
     bundle: true,

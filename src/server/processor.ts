@@ -1,13 +1,14 @@
 import * as fs from "fs";
 import { Database } from "./database";
 import { Rag } from "./rag";
-import { BaseSource, EmbedderDocument, FaqSource, FlarumSource, ProcessingJob, SitemapSource } from "../common/api";
+import { BaseSource, EmbedderDocument, FaqSource, FlarumSource, Logger, ProcessingJob, SitemapSource, VectorMetadata } from "../common/api";
 import { Collection as MongoCollection, ObjectId, Document } from "mongodb";
 import { assertNever, sleep } from "../utils/utils";
-import { FaqSourceElement } from "../pages";
+import { Embedder } from "./embedder";
+import { ChromaClient, Metadata } from "chromadb";
 
 abstract class BaseProcessor<T extends BaseSource> {
-    constructor(readonly job: ProcessingJob, readonly processor: Processor, readonly source: T) {}
+    constructor(readonly processor: Processor, readonly source: T, readonly log: Logger) {}
 
     abstract process(): Promise<EmbedderDocument[]>;
 }
@@ -15,16 +16,17 @@ abstract class BaseProcessor<T extends BaseSource> {
 class FaqProccessor extends BaseProcessor<FaqSource> {
     async process(): Promise<EmbedderDocument[]> {
         const documents: EmbedderDocument[] = [];
-        await this.processor.log(this.job, "Processing " + this.source.faqs.length + " FAQ entries");
+        await this.log("Processing " + this.source.faqs.length + " FAQ entries");
         for (const entry of this.source.faqs) {
             documents.push({
-                uri: "faq://" + this.source._id,
+                uri: "faq://" + this.source._id + "/" + entry.id,
                 text: entry.questions + "\n\n" + entry.answer,
                 title: this.source.name + " " + entry.id,
                 segments: [],
             });
         }
-        await this.processor.log(this.job, "Done");
+        const embedder = new Embedder(this.processor.openaiKey, this.log);
+        await embedder.embedDocuments(documents);
         return documents;
     }
 }
@@ -42,7 +44,13 @@ class SitemapProccessor extends BaseProcessor<SitemapSource> {
 }
 
 class Processor {
-    constructor(private jobs: MongoCollection<Document>, readonly database: Database) {}
+    embedder: Embedder;
+    chroma: ChromaClient;
+
+    constructor(private jobs: MongoCollection<Document>, readonly database: Database, readonly openaiKey: string) {
+        this.embedder = new Embedder(openaiKey, async (message: string) => console.log(message));
+        this.chroma = new ChromaClient({ path: "http://chroma:8000" });
+    }
 
     async getNextJob(): Promise<ProcessingJob | undefined> {
         let job = (await this.jobs.findOneAndUpdate(
@@ -88,21 +96,64 @@ class Processor {
                         console.log("Fetched source");
 
                         const docs: EmbedderDocument[] = [];
+                        const logger: Logger = async (message: string) => await this.log(job, message);
                         switch (source.type) {
                             case "faq": {
-                                docs.push(...(await new FaqProccessor(job, this, source).process()));
+                                docs.push(...(await new FaqProccessor(this, source, logger).process()));
                                 break;
                             }
                             case "flarum": {
-                                docs.push(...(await new FlarumProccessor(job, this, source).process()));
+                                docs.push(...(await new FlarumProccessor(this, source, logger).process()));
                                 break;
                             }
                             case "sitemap": {
-                                docs.push(...(await new SitemapProccessor(job, this, source).process()));
+                                docs.push(...(await new SitemapProccessor(this, source, logger).process()));
                                 break;
                             }
                             default:
                                 assertNever(source);
+                        }
+
+                        const collection = await this.chroma.getOrCreateCollection({
+                            name: source.collectionId,
+                            embeddingFunction: { generate: (texts) => this.embedder.embed(texts) },
+                        });
+                        await collection.delete({ where: { sourceId: source._id! } });
+                        const ids = docs.flatMap((doc) => doc.segments.map((seg, index) => doc.uri + "|" + index));
+                        const embeddings = docs.flatMap((doc) => doc.segments.map((seg) => seg.embedding));
+                        const metadatas = docs.flatMap((doc) =>
+                            doc.segments.map((seg, index) => {
+                                const metadata: VectorMetadata = {
+                                    sourceId: source._id!,
+                                    docUri: doc.uri,
+                                    docTitle: doc.title,
+                                    index,
+                                    tokenCount: seg.tokenCount,
+                                };
+                                return metadata as unknown as Metadata;
+                            })
+                        );
+                        const vectorDocs = docs.flatMap((doc) =>
+                            doc.segments.map((seg) => {
+                                return seg.text;
+                            })
+                        );
+                        let numProcessed = 0;
+                        const total = ids.length;
+                        while (ids.length > 0) {
+                            const batchSize = 2000;
+                            const batchIds = ids.splice(0, batchSize);
+                            const batchEmbeddings = embeddings.splice(0, batchSize);
+                            const batchMetadatas = metadatas.splice(0, batchSize);
+                            const batchDocuments = vectorDocs.splice(0, batchSize);
+                            await collection.upsert({
+                                ids: batchIds,
+                                embeddings: batchEmbeddings,
+                                metadatas: batchMetadatas,
+                                documents: batchDocuments,
+                            });
+                            numProcessed += batchIds.length;
+                            logger(`Wrote ${numProcessed}/${total} segments to vector collection ${source.collectionId}`);
                         }
 
                         await this.finishJob(job._id!, true);
@@ -154,6 +205,6 @@ if (!dbPassword) {
     await Database.jobs!.updateMany({ state: "running" }, { $set: { state: "stopped", finishedAt: Date.now() } });
     const db = new Database();
     const jobs = Database.jobs!;
-    const processor = new Processor(jobs, db);
+    const processor = new Processor(jobs, db, openaiKey);
     processor.process();
 })();

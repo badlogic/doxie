@@ -1,5 +1,7 @@
 import { Document, MongoClient, Collection as MongoCollection, ObjectId } from "mongodb";
-import { Collection, ProcessingJob, Source } from "../common/api";
+import { Collection, ProcessingJob, Source, VectorDocument, VectorMetadata } from "../common/api";
+import { ChromaClient, IncludeEnum } from "chromadb";
+import { Embedder } from "./embedder";
 
 export class Database {
     static client?: MongoClient;
@@ -160,5 +162,48 @@ export class Database {
         }
 
         return job;
+    }
+}
+
+export class VectorStore {
+    chroma: ChromaClient;
+    embedder: Embedder;
+    constructor(openaiKey: string, url = "http://chroma:8000") {
+        this.chroma = new ChromaClient({ path: url });
+        this.embedder = new Embedder(openaiKey, async (message: string) => console.log(message));
+    }
+
+    async getDocuments(collectionId: string, sourceId: string, offset: number, limit: number) {
+        const collection = await this.chroma.getCollection({ name: collectionId });
+        const response = await collection.get({ where: { sourceId }, offset, limit, include: ["metadatas", "documents"] as IncludeEnum[] });
+        const vectorDocs: VectorDocument[] = [];
+        for (let i = 0; i < response.ids.length; i++) {
+            const vectorDoc: VectorDocument = { ...(response.metadatas[i] as unknown as VectorMetadata), text: response.documents[i]! };
+            vectorDocs.push(vectorDoc);
+        }
+        return vectorDocs;
+    }
+
+    async query(collectionId: string, sourceId: string | undefined, query: string, k: number = 10) {
+        const start = performance.now();
+        const queryVector = (await this.embedder.embed([query]))[0];
+        console.log("Embedding query took: " + ((performance.now() - start) / 1000).toFixed(3) + " secs");
+        const collection = await this.chroma.getCollection({ name: collectionId });
+        const queryConfig: any = {
+            queryEmbeddings: [queryVector],
+            nResults: k,
+            include: ["metadatas", "documents"] as IncludeEnum[],
+        };
+        if (sourceId) {
+            queryConfig.where = { sourceId };
+        }
+        const response = await collection.query(queryConfig);
+        const vectorDocs: VectorDocument[] = [];
+        for (let i = 0; i < response.ids[0].length; i++) {
+            const vectorDoc: VectorDocument = { ...(response.metadatas[0][i] as unknown as VectorMetadata), text: response.documents[0][i]! };
+            vectorDocs.push(vectorDoc);
+        }
+        console.log("Querying took: " + ((performance.now() - start) / 1000).toFixed(3) + " secs");
+        return vectorDocs;
     }
 }

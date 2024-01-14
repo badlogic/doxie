@@ -4,3 +4,4 @@ export * from "./collection.js";
 export * from "./main.js";
 export * from "./settings.js";
 export * from "./source.js";
+export * from "./documents.js";

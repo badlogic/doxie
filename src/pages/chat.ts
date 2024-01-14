@@ -81,12 +81,13 @@ export class ChatGptReply extends BaseElement {
 
     protected firstUpdated(_changedProperties: PropertyValueMap<any> | Map<PropertyKey, unknown>): void {
         super.firstUpdated(_changedProperties);
-        const collection = router.getCurrentParams()?.get("collection") ?? "berufslexikon";
+        const collection = router.getCurrentParams()?.get("collection") ?? "";
+        const source = router.getCurrentParams()?.get("source");
         if (this.query && this.sessionId) {
             const query = this.query;
             const sessionId = this.sessionId;
             (async () => {
-                const result = await Api.complete(sessionId, collection, query, (chunk, type, done) => {
+                const result = await Api.complete(sessionId, collection, source, query, (chunk, type, done) => {
                     if (type == "text") {
                         this.text += chunk;
                     } else {

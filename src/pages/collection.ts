@@ -1,15 +1,14 @@
-import { LitElement, html, nothing, render } from "lit";
-import { BaseElement, closeButton, dom, renderError, renderTopbar } from "../app.js";
+import { html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { pageContainerStyle, pageContentStyle } from "../utils/styles.js";
-import { Store } from "../utils/store.js";
-import { i18n } from "../utils/i18n.js";
-import { Api, Collection, FaqSource, FlarumSource, ProcessingJob, Source } from "../common/api.js";
-import { addIcon, deleteIcon, plusIcon } from "../utils/icons.js";
-import { router } from "../utils/routing.js";
-import { appState } from "../appstate.js";
 import { map } from "lit/directives/map.js";
-import { assertNever } from "../utils/utils.js";
+import { BaseElement, closeButton, renderError, renderTopbar } from "../app.js";
+import { appState } from "../appstate.js";
+import { Api, Collection, ProcessingJob, Source } from "../common/api.js";
+import { i18n } from "../utils/i18n.js";
+import { addIcon, deleteIcon } from "../utils/icons.js";
+import { router } from "../utils/routing.js";
+import { Store } from "../utils/store.js";
+import { pageContainerStyle, pageContentStyle } from "../utils/styles.js";
 
 @customElement("collection-page")
 export class CollectionPage extends BaseElement {
@@ -196,81 +195,13 @@ export class CollectionPage extends BaseElement {
                                               ? html`<div class="line-clamp-2 px-2">${source.description}</div>`
                                               : nothing}
                                       </a>
-                                      ${this.renderJobState(source)}
+                                      <source-panel .source=${source}></source-panel>
                                   </div>`
                               )}
                           </div>`
                     : nothing}
             </div>
         </div>`;
-    }
-
-    renderJobState(source: Source) {
-        const process = async (ev: Event, stop: boolean) => {
-            ev.preventDefault();
-            ev.stopPropagation();
-            const job = stop
-                ? await Api.stopProcessingSource(Store.getAdminToken()!, source._id!)
-                : await Api.processSource(Store.getAdminToken()!, source._id!);
-            if (!job.success) {
-                alert("Could not start processing");
-                return;
-            }
-            if (job.data) this.jobs.set(source._id!, job.data);
-            else this.jobs.delete(source._id!);
-            this.requestUpdate();
-        };
-
-        if (this.jobs.has(source._id!)) {
-            const job = this.jobs.get(source._id!)!;
-            const toggleLogs = (ev: Event) => {
-                ev.preventDefault();
-                ev.stopPropagation();
-                const target = ev.target as HTMLElement;
-                target.parentElement?.parentElement?.querySelector<HTMLDivElement>("#logs")?.classList.toggle("hidden");
-            };
-            const logs = job.log.length > 0 ? html`<div class="w-full flex flex-col"></div>` : nothing;
-
-            let status = "";
-            let color = "";
-            let action = i18n("Process");
-            let stop = false;
-            switch (job.state) {
-                case "running":
-                    status = i18n("Processing");
-                    color = "text-green-400";
-                    action = i18n("Stop");
-                    stop = true;
-                    break;
-                case "waiting":
-                    status = i18n("Waiting for processing");
-                    color = "text-yellow-400";
-                    action = i18n("Stop");
-                    stop = true;
-                    break;
-                case "succeeded":
-                    status = i18n("Processing succeeded")(job.finishedAt);
-                    color = "text-green-400";
-                    break;
-                case "failed":
-                    status = i18n("Processing failed")(job.finishedAt);
-                    color = "text-red-400";
-                    break;
-                case "stopped":
-                    status = i18n("Processing stopped by user")(job.finishedAt);
-            }
-
-            return html`<div class="flex flex-col gap-2">
-                <div class="flex gap-2 items-center px-2 mb-2">
-                    <button class="self-start button" @click=${(ev: Event) => process(ev, stop)}>${action}</button>
-                    <button class="self-start button" @click=${toggleLogs}>${i18n("Logs")}</button>
-                    <span class="${color} font-semibold text-sm">${status}</span>
-                </div>
-                <div id="logs" class="hidden debug hljs -mt-2 p-4 whitespace-pre-wrap min-h-80 max-h-80">${job.log}</div>
-            </div>`;
-        } else {
-            return html`<button class="self-start button mx-2 mb-2" @click=${(ev: Event) => process(ev, false)}>${i18n("Process")}</button>`;
-        }
     }
 
     handleInput() {
@@ -326,5 +257,121 @@ export class CollectionPage extends BaseElement {
                 router.replace("/collections/" + this.collection._id);
             }
         }
+    }
+}
+
+@customElement("source-panel")
+export class SourcePanel extends BaseElement {
+    @property()
+    source?: Source;
+
+    @state()
+    error?: string;
+
+    @state()
+    job?: ProcessingJob;
+
+    timeoutId: any = -1;
+    connectedCallback(): void {
+        super.connectedCallback();
+        const updateJob = async () => {
+            await this.getJob(Store.getAdminToken()!);
+            this.timeoutId = setTimeout(updateJob, 1000);
+        };
+        updateJob();
+    }
+
+    disconnectedCallback(): void {
+        super.disconnectedCallback();
+        clearTimeout(this.timeoutId);
+    }
+
+    async getJob(adminToken: string) {
+        if (!adminToken) return;
+        if (!this.source) return;
+        const jobs = await Api.getJob(adminToken, this.source._id!);
+        if (!jobs.success) {
+            this.error = i18n("Could not load job");
+        } else {
+            if (jobs.data) this.job = jobs.data;
+        }
+        this.requestUpdate();
+    }
+
+    render() {
+        const source = this.source;
+        if (!source) return renderError("Source not defined");
+
+        if (this.job) {
+            const job = this.job;
+            const toggleLogs = (ev: Event) => {
+                ev.preventDefault();
+                ev.stopPropagation();
+                const target = ev.target as HTMLElement;
+                target.parentElement?.parentElement?.querySelector<HTMLDivElement>("#logs")?.classList.toggle("hidden");
+            };
+
+            let status = "";
+            let color = "";
+            let action = i18n("Process");
+            let stop = false;
+            switch (job.state) {
+                case "running":
+                    status = i18n("Processing");
+                    color = "text-green-400";
+                    action = i18n("Stop");
+                    stop = true;
+                    break;
+                case "waiting":
+                    status = i18n("Waiting for processing");
+                    color = "text-yellow-400";
+                    action = i18n("Stop");
+                    stop = true;
+                    break;
+                case "succeeded":
+                    status = i18n("Processing succeeded")(job.finishedAt);
+                    color = "text-green-400";
+                    break;
+                case "failed":
+                    status = i18n("Processing failed")(job.finishedAt);
+                    color = "text-red-400";
+                    break;
+                case "stopped":
+                    status = i18n("Processing stopped by user")(job.finishedAt);
+            }
+
+            return html`<div class="flex flex-col gap-2">
+                ${this.error ? renderError(this.error) : nothing}
+                <span class="${color} font-semibold text-sm px-2">${status}</span>
+                <div class="flex gap-2 items-center px-2 mb-2">
+                    <button class="self-start button" @click=${(ev: Event) => this.process(ev, stop)}>${action}</button>
+                    <button class="self-start button" @click=${toggleLogs}>${i18n("Logs")}</button>
+                    <a href="/documents/${source._id}" class="self-start button">${i18n("Docs")}</a>
+                    <a href="/chat/${source.collectionId}/${source._id}" class="self-start button">${i18n("Chat")}</a>
+                </div>
+                <div id="logs" class="hidden debug hljs -mt-2 p-4 whitespace-pre-wrap min-h-80 max-h-80">${job.log}</div>
+            </div>`;
+        } else {
+            return html`<div class="flex flex-col gap-2">
+                ${this.error ? renderError(this.error) : nothing}
+                <button class="self-start button mx-2 mb-2" @click=${(ev: Event) => this.process(ev, false)}>${i18n("Process")}</button>
+            </div>`;
+        }
+    }
+
+    async process(ev: Event, stop: boolean) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const source = this.source;
+        if (!source) return;
+        const job = stop
+            ? await Api.stopProcessingSource(Store.getAdminToken()!, source._id!)
+            : await Api.processSource(Store.getAdminToken()!, source._id!);
+        if (!job.success) {
+            alert("Could not start processing");
+            return;
+        }
+        this.job = job.data;
+        this.requestUpdate();
     }
 }

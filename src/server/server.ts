@@ -10,7 +10,7 @@ import WebSocket, { WebSocketServer } from "ws";
 import { Collection, ProcessingJob, Source } from "../common/api";
 import { ErrorReason } from "../common/errors";
 import { ChatSessions } from "./chatsessions";
-import { Database } from "./database";
+import { Database, VectorStore } from "./database";
 import { Embedder } from "./embedder";
 import { Rag } from "./rag";
 import { Jobs } from "./jobs";
@@ -52,10 +52,11 @@ function logError(endpoint: string, message: string, e: any) {
     }
 
     await Promise.all([Rag.waitForChroma(), Database.waitForMongo()]);
-    const embedder = new Embedder(openaiKey);
+    const embedder = new Embedder(openaiKey, async (message: string) => console.log(message));
     const rag = new Rag(embedder);
     const database = new Database();
-    const sessions = new ChatSessions(openaiKey, []);
+    const vectors = new VectorStore(openaiKey);
+    const sessions = new ChatSessions(openaiKey, database, vectors);
     const jobs = new Jobs(database);
 
     // const berufsLexikonFile = "docker/data/berufslexikon.embeddings.bin";
@@ -242,28 +243,78 @@ function logError(endpoint: string, message: string, e: any) {
         }
     });
 
-    app.get("/api/sources/:id/stopprocessing", [header("authorization").notEmpty().isString()], async (req: Request, res: Response) => {
-        const errors = validationResult(req);
-        if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
-        try {
-            const token = req.headers.authorization!;
-            if (token != adminToken) throw new Error("Inavlid admin token");
-            const sourceId = req.params.id as string;
-            const job = await jobs.stopJob(sourceId);
-            apiSuccess(res, job);
-        } catch (e) {
-            const error = "Could not stop processing source " + req.body._id;
-            logError(req.path, error, e);
-            apiError(res, error);
+    app.get(
+        "/api/sources/:id/stopprocessing",
+        [header("authorization").notEmpty().isString(), param("id").notEmpty().isString()],
+        async (req: Request, res: Response) => {
+            const errors = validationResult(req);
+            if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
+            try {
+                const token = req.headers.authorization!;
+                if (token != adminToken) throw new Error("Inavlid admin token");
+                const sourceId = req.params.id as string;
+                const job = await jobs.stopJob(sourceId);
+                apiSuccess(res, job);
+            } catch (e) {
+                const error = "Could not stop processing source " + req.body._id;
+                logError(req.path, error, e);
+                apiError(res, error);
+            }
         }
-    });
+    );
+
+    app.get(
+        "/api/documents/:collectionId/:sourceId",
+        [header("authorization").notEmpty().isString(), param("collectionId").notEmpty().isString(), param("sourceId").notEmpty().isString()],
+        async (req: Request, res: Response) => {
+            const errors = validationResult(req);
+            if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
+            try {
+                const token = req.headers.authorization!;
+                if (token != adminToken) throw new Error("Inavlid admin token");
+                const collectionId = req.params.collectionId as string;
+                const sourceId = req.params.sourceId as string;
+                const offset = parseInt((req.query.offset as string) ?? "0");
+                const limit = parseInt((req.query.limit as string) ?? "25");
+                const response = await vectors.getDocuments(collectionId, sourceId, offset, limit);
+                apiSuccess(res, response);
+            } catch (e) {
+                const error = "Could not get documents of source " + req.params.sourceId;
+                logError(req.path, error, e);
+                apiError(res, error);
+            }
+        }
+    );
+
+    app.get(
+        "/api/documents/:collectionId/:sourceId/query",
+        [header("authorization").notEmpty().isString(), param("collectionId").notEmpty().isString(), param("sourceId").notEmpty().isString()],
+        async (req: Request, res: Response) => {
+            const errors = validationResult(req);
+            if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
+            try {
+                const token = req.headers.authorization!;
+                if (token != adminToken) throw new Error("Inavlid admin token");
+                const collectionId = req.params.collectionId as string;
+                const sourceId = req.params.sourceId as string;
+                const query = req.query.query as string;
+                const k = parseInt(req.query.k as string);
+                const response = await vectors.query(collectionId, sourceId, query, k);
+                apiSuccess(res, response);
+            } catch (e) {
+                const error = "Could not get documents of source " + req.params.sourceId;
+                logError(req.path, error, e);
+                apiError(res, error);
+            }
+        }
+    );
 
     app.post("/api/createSession", [body("collection").notEmpty().isString()], async (req: Request, res: Response) => {
         const errors = validationResult(req);
         if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
         try {
             const collection = req.body.collection;
-            const sessionId = sessions.createSession(req.ip ?? "", collection);
+            const sessionId = await sessions.createSession(req.ip ?? "", collection);
             apiSuccess(res, { sessionId });
         } catch (e) {
             logError(req.path, "Couldn't create session", e);
@@ -273,15 +324,16 @@ function logError(endpoint: string, message: string, e: any) {
 
     app.post(
         "/api/complete",
-        [header("authorization").notEmpty().isString(), body("message").notEmpty().isString(), body("collection").notEmpty().isString()],
+        [header("authorization").notEmpty().isString(), body("message").notEmpty().isString(), body("collectionId").notEmpty().isString()],
         async (req: Request, res: Response) => {
             const errors = validationResult(req);
             if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
             try {
                 const sessionId = req.headers.authorization!;
-                const collection = req.body.collection;
+                const collection = req.body.collectionId;
+                const source = req.body.sourceId;
                 const message = req.body.message;
-                await sessions.complete(sessionId, collection, message, (content, type) => {
+                await sessions.complete(sessionId, collection, source, message, (content, type) => {
                     const encoder = new TextEncoder();
                     if (content) {
                         const bytes = encoder.encode(content);
