@@ -221,7 +221,7 @@ export class CollectionPage extends BaseElement {
                                       class="flex flex-col gap-2 border border-divider rounded-md underline-none hover:border-primary"
                                   >
                                       <a href="/sources/${encodeURIComponent(source._id ?? "")}">
-                                          <div class="flex p-4 gap-2">
+                                          <div class="flex p-4 pb-0 gap-2">
                                               <span class="rounded-md px-1 bg-green-600 font-semibold">${source.type}</span>
                                               <span class="font-semibold">${source.name}</span>
                                               <button
@@ -310,6 +310,7 @@ export class CollectionPage extends BaseElement {
         ev.stopPropagation();
         source = { ...source };
         source._id = undefined;
+        source.collectionId = "";
         downloadJson(source, source.name);
     }
 
@@ -317,6 +318,7 @@ export class CollectionPage extends BaseElement {
         ev.preventDefault();
         ev.stopPropagation();
         uploadJson(async (source: Source) => {
+            source.collectionId = this.collection._id!;
             const result = await Api.setSource(Store.getAdminToken()!, source);
             if (!result.success) {
                 toast("Could not import source");
@@ -411,18 +413,18 @@ export class SourcePanel extends BaseElement {
             return html`<div class="flex flex-col gap-2">
                 ${this.error ? renderError(this.error) : nothing}
                 <span class="${color} font-semibold text-sm">${status}</span>
-                <div class="flex gap-2 items-center mb-2">
+                <div class="flex gap-2 items-center">
                     <button class="self-start button" @click=${(ev: Event) => this.process(ev, stop)}>${action}</button>
                     <button class="self-start button" @click=${toggleLogs}>${i18n("Logs")}</button>
                     <a href="/documents/${source._id}" class="self-start button">${i18n("Docs")}</a>
                     <a href="/chat/${source.collectionId}/${source._id}" class="self-start button">${i18n("Chat")}</a>
                 </div>
-                <div id="logs" class="hidden debug hljs -mt-2 p-4 whitespace-pre-wrap min-h-80 max-h-80">${job.log}</div>
+                <div id="logs" class="hidden debug hljs p-4 whitespace-pre-wrap min-h-80 max-h-80">${job.log}</div>
             </div>`;
         } else {
             return html`<div class="flex flex-col gap-2">
                 ${this.error ? renderError(this.error) : nothing}
-                <button class="self-start button mx-2 mb-2" @click=${(ev: Event) => this.process(ev, false)}>${i18n("Process")}</button>
+                <button class="self-start button mx-2" @click=${(ev: Event) => this.process(ev, false)}>${i18n("Process")}</button>
             </div>`;
         }
     }

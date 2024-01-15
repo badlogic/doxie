@@ -361,7 +361,7 @@ function logError(endpoint: string, message: string, e: any) {
                 res.end();
             } catch (e) {
                 logError(req.path, "Couldn't complete message", e);
-                apiError(res, "Unknown server error");
+                apiError(res, "Unknown server error" + (e as Error).message + (e as Error).stack);
             }
         }
     );
