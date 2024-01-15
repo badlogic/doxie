@@ -87,7 +87,7 @@ export class ChatGptReply extends BaseElement {
             const query = this.query;
             const sessionId = this.sessionId;
             (async () => {
-                const result = await Api.complete(sessionId, collection, source, query, (chunk, type, done) => {
+                const result = await Api.complete(sessionId, query, (chunk, type, done) => {
                     if (type == "text") {
                         this.text += chunk;
                     } else {

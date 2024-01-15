@@ -61,6 +61,7 @@ export interface Messages {
     "Chat with ": string;
     Export: string;
     Import: "Import";
+    "User questions": string;
 }
 
 const english: Messages = {
@@ -125,6 +126,7 @@ const english: Messages = {
     "Chat with ": "Chat with ",
     Export: "Export",
     Import: "Import",
+    "User questions": "User questions",
 };
 
 export type LanguageCode = "en";

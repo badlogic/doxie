@@ -16,6 +16,7 @@
     "cheerio": "^1.0.0-rc.12",
     "chokidar": "^3.5.3",
     "chromadb": "^1.7.3",
+    "cohere-ai": "^7.6.2",
     "compression": "^1.7.4",
     "cors": "^2.8.5",
     "dom-serializer": "^2.0.0",

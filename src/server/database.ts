@@ -1,5 +1,5 @@
 import { Document, MongoClient, Collection as MongoCollection, ObjectId } from "mongodb";
-import { Collection, ProcessingJob, Source, VectorDocument, VectorMetadata } from "../common/api";
+import { ChatSession, Collection, ProcessingJob, Source, VectorDocument, VectorMetadata } from "../common/api";
 import { ChromaClient, IncludeEnum } from "chromadb";
 import { Embedder } from "./embedder";
 
@@ -9,6 +9,7 @@ export class Database {
     static sources?: MongoCollection<Document>;
     static documents?: MongoCollection<Document>;
     static jobs?: MongoCollection<Document>;
+    static chats?: MongoCollection<Document>;
 
     static async waitForMongo() {
         const user = "doxie";
@@ -24,6 +25,7 @@ export class Database {
                 this.sources = db.collection("sources");
                 this.documents = db.collection("documents");
                 this.jobs = db.collection("jobs");
+                this.chats = db.collection("chats");
                 connected = true;
                 break;
             } catch (e) {
@@ -121,6 +123,47 @@ export class Database {
         }
 
         return source;
+    }
+
+    async getChats(collectionId: string, offset: number, limit = 25): Promise<ChatSession[]> {
+        const chats = Database.chats;
+        if (!chats) throw new Error("Not connected");
+        const result = await chats.find<ChatSession>({ collectionId }).sort({ lastModified: -1 }).skip(offset).limit(limit).toArray();
+        return result;
+    }
+
+    async getChat(id: string): Promise<ChatSession> {
+        const chats = Database.chats;
+        if (!chats) throw new Error("Not connected");
+        const result = await chats.findOne<ChatSession>({ _id: new ObjectId(id) });
+        if (!result) throw new Error("Chat with id " + id + " does not exist");
+        result._id = (result as any)._id?.toHexString();
+        return result;
+    }
+
+    async deleteChat(id: string): Promise<void> {
+        const chats = Database.chats;
+        if (!chats) throw new Error("Not connected");
+        const result = await chats.deleteOne({ _id: new ObjectId(id) });
+        if (!result.deletedCount) throw new Error("Chat with id " + id + " does not exist");
+    }
+
+    async setChat(chat: ChatSession): Promise<ChatSession> {
+        const chats = Database.chats;
+        if (!chats) throw new Error("Not connected");
+
+        if (chat._id && ObjectId.isValid(chat._id)) {
+            (chat as any)._id = new ObjectId(chat._id);
+        }
+
+        if (!chat._id) {
+            const result = await chats.insertOne(chat as any);
+            chat._id = result.insertedId.toHexString();
+        } else {
+            await chats.updateOne({ _id: new ObjectId(chat._id) }, { $set: chat });
+        }
+
+        return chat;
     }
 
     async getJobBySource(sourceId: string): Promise<ProcessingJob | null> {

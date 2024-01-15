@@ -1,15 +1,17 @@
-import { html, nothing } from "lit";
+import { TemplateResult, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { map } from "lit/directives/map.js";
-import { BaseElement, closeButton, renderError, renderTopbar, toast } from "../app.js";
+import { BaseElement, closeButton, dom, renderError, renderTopbar, toast } from "../app.js";
 import { appState } from "../appstate.js";
-import { Api, Collection, ProcessingJob, Source } from "../common/api.js";
+import { Api, ChatSession, Collection, ProcessingJob, Source, VectorDocument } from "../common/api.js";
 import { i18n } from "../utils/i18n.js";
 import { addIcon, deleteIcon, downloadIcon } from "../utils/icons.js";
 import { router } from "../utils/routing.js";
 import { Store } from "../utils/store.js";
 import { pageContainerStyle, pageContentStyle } from "../utils/styles.js";
 import { repeat } from "lit-html/directives/repeat.js";
+import { Stream } from "../utils/streams.js";
+import { StreamView } from "../utils/streamviews.js";
 
 function downloadJson(obj: any, filename: string): void {
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(obj, null, 2));
@@ -244,6 +246,10 @@ export class CollectionPage extends BaseElement {
                                       <source-panel class="p-4 pt-0" .source=${source}></source-panel>
                                   </div>`
                               )}
+                          </div>
+                          <div class="flex flex-col items-center gap-2">
+                              <h2 class="self-start">${i18n("User questions")}</h2>
+                              <chat-sessions class="w-full" .collectionId=${this.collection._id}></chat-sessions>
                           </div>`
                     : nothing}
             </div>
@@ -443,5 +449,53 @@ export class SourcePanel extends BaseElement {
         }
         this.job = job.data;
         this.requestUpdate();
+    }
+}
+
+class ChatSessionStream extends Stream<ChatSession> {
+    getItemKey(item: ChatSession): string {
+        return item._id!;
+    }
+    getItemDate(item: ChatSession): Date {
+        return new Date();
+    }
+}
+
+@customElement("chat-session-stream")
+class ChatSessionStreamView extends StreamView<ChatSession> {
+    constructor() {
+        super();
+        this.wrapItem = false;
+    }
+
+    renderItem(item: ChatSession, polledItems: boolean): TemplateResult {
+        const messages = item.rawMessages.filter((message) => message.role == "user");
+        if (messages.length == 0) {
+            return html`<div></div> `;
+        }
+        return html`<div>
+            ${map(messages, (message) => html`<a class="w-full flex flex-col p-2 border border-divider rounded-lg mt-2">${message.content}</a>`)}
+        </div>`;
+    }
+}
+
+@customElement("chat-sessions")
+class ChatSessionsElement extends BaseElement {
+    @property()
+    collectionId?: string;
+
+    render() {
+        if (!this.collectionId) return html`${nothing}`;
+
+        const stream = new ChatSessionStream(async (cursor?: string) => {
+            let offset = cursor ? parseInt(cursor) : 0;
+            const result = await Api.getChats(Store.getAdminToken()!, this.collectionId!, offset, 25);
+            if (!result.success) {
+                return { items: [] };
+            }
+            return { cursor: (offset + 25).toString(), items: result.data };
+        });
+        const streamView = dom(html`<chat-session-stream .stream=${stream}></chat-session-stream>`)[0];
+        return html`${streamView}`;
     }
 }

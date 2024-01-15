@@ -98,6 +98,23 @@ export interface CompletionDebug {
     tokensOut: number;
 }
 
+export interface ChatMessage {
+    role: "system" | "assistant" | "user";
+    content: string;
+}
+
+export interface ChatSession {
+    _id?: string;
+    collectionId: string;
+    sourceId?: string;
+    createdAt: number;
+    lastModified: number;
+    messages: ChatMessage[];
+    rawMessages: ChatMessage[];
+    debug: boolean;
+    ip: string;
+}
+
 export type ApiResponse<T, E extends ErrorReason = ErrorReason> = ApiResponseSuccess<T> | ApiResponseError<E>;
 
 interface ApiResponseSuccess<T> {
@@ -179,14 +196,12 @@ export async function apiPost<T, E extends ErrorReason = ErrorReason>(
 }
 
 export class Api {
-    static async createSession(collection: string) {
-        return apiPost<{ sessionId: string }>("createSession", { collection });
+    static async createSession(collectionId: string, sourceId?: string) {
+        return apiPost<{ sessionId: string }>("createSession", { collectionId, sourceId });
     }
 
     static async complete(
         sessionId: string,
-        collectionId: string,
-        sourceId: string | undefined,
         message: string,
         chunkCb: (chunk: string, type: "text" | "debug", done: boolean) => void
     ): Promise<ApiResponse<void, "Could not get completion">> {
@@ -197,7 +212,7 @@ export class Api {
                     "Content-Type": "application/json",
                     Authorization: sessionId,
                 },
-                body: JSON.stringify({ message, collectionId, sourceId }),
+                body: JSON.stringify({ message }),
             });
             if (!response.ok) return { success: false, error: "Could not get completion" };
             if (!response.body) return { success: false, error: "Unknown server error" };
@@ -324,6 +339,13 @@ export class Api {
                 "/" +
                 encodeURIComponent(sourceId) +
                 `?offset=${encodeURIComponent(offset)}&limit=${encodeURIComponent(limit)}`,
+            adminToken
+        );
+    }
+
+    static async getChats(adminToken: string, collectionId: string, offset: number, limit: number) {
+        return apiGet<ChatSession[]>(
+            "chats/" + encodeURIComponent(collectionId) + `?offset=${encodeURIComponent(offset)}&limit=${encodeURIComponent(limit)}`,
             adminToken
         );
     }

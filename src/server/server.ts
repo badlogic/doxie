@@ -23,6 +23,10 @@ if (!openaiKey) {
     console.error("Please specify the DOXIE_OPENAI_KEY env var");
     process.exit(-1);
 }
+const cohereKey = process.env.DOXIE_COHERE_KEY;
+if (!cohereKey) {
+    console.error("DOXIE_COHERE_KEY env var not set, will not use Cohere for reranking RAG results");
+}
 const adminToken = process.env.DOXIE_ADMIN_TOKEN;
 if (!adminToken) {
     console.error("Please specify the DOXIE_ADMIN_TOKEN env var");
@@ -56,7 +60,7 @@ function logError(endpoint: string, message: string, e: any) {
     const rag = new Rag(embedder);
     const database = new Database();
     const vectors = new VectorStore(openaiKey);
-    const sessions = new ChatSessions(openaiKey, database, vectors);
+    const sessions = new ChatSessions(openaiKey, database, vectors, cohereKey);
     const jobs = new Jobs(database);
 
     // const berufsLexikonFile = "docker/data/berufslexikon.embeddings.bin";
@@ -319,12 +323,35 @@ function logError(endpoint: string, message: string, e: any) {
         }
     );
 
-    app.post("/api/createSession", [body("collection").notEmpty().isString()], async (req: Request, res: Response) => {
+    app.get(
+        "/api/chats/:collectionId",
+        [header("authorization").notEmpty().isString(), param("collectionId").notEmpty().isString()],
+        async (req: Request, res: Response) => {
+            const errors = validationResult(req);
+            if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
+            try {
+                const token = req.headers.authorization!;
+                if (token != adminToken) throw new Error("Inavlid admin token");
+                const collectionId = req.params.collectionId as string;
+                const offset = parseInt((req.query.offset as string) ?? "0");
+                const limit = parseInt((req.query.limit as string) ?? "25");
+                const response = await database.getChats(collectionId, offset, limit);
+                apiSuccess(res, response);
+            } catch (e) {
+                const error = "Could not get chats of collection " + req.params.collectionId;
+                logError(req.path, error, e);
+                apiError(res, error);
+            }
+        }
+    );
+
+    app.post("/api/createSession", [body("collectionId").notEmpty().isString()], async (req: Request, res: Response) => {
         const errors = validationResult(req);
         if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
         try {
-            const collection = req.body.collection;
-            const sessionId = await sessions.createSession(req.ip ?? "", collection);
+            const collectionId = req.body.collectionId;
+            const sourceId = req.body.sourceId;
+            const sessionId = await sessions.createSession(req.ip ?? "", collectionId, sourceId);
             apiSuccess(res, { sessionId });
         } catch (e) {
             logError(req.path, "Couldn't create session", e);
@@ -334,16 +361,14 @@ function logError(endpoint: string, message: string, e: any) {
 
     app.post(
         "/api/complete",
-        [header("authorization").notEmpty().isString(), body("message").notEmpty().isString(), body("collectionId").notEmpty().isString()],
+        [header("authorization").notEmpty().isString(), body("message").notEmpty().isString()],
         async (req: Request, res: Response) => {
             const errors = validationResult(req);
             if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
             try {
                 const sessionId = req.headers.authorization!;
-                const collection = req.body.collectionId;
-                const source = req.body.sourceId;
                 const message = req.body.message;
-                await sessions.complete(sessionId, collection, source, message, (content, type) => {
+                await sessions.complete(sessionId, message, (content, type) => {
                     const encoder = new TextEncoder();
                     if (content) {
                         const bytes = encoder.encode(content);
