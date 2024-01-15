@@ -18,12 +18,12 @@
     --muted: #f3f4f6;
     --muted-fg: #6b7280;
     --input: #e5e7eb;
-    --divider: #d1d5db;
+    --divider: #999b9e;
 }
 
 /* Dark theme variables */
 .dark {
-    --background: #343541;
+    --background: #111;
     --accent: #3b82f6;
     --accent-dark: #1e40af;
     --primary: #cc7d24;
@@ -147,24 +147,24 @@
     }
 
     .gpt-reply pre {
-        @apply max-w-full text-xs rounded-md overflow-auto mt-2;
+        @apply max-w-full text-xs rounded-md overflow-auto mt-2 hljs w-full p-4;
     }
 
     .gpt-reply p:not(:first-child) {
         @apply mt-2;
     }
 
-    .gpt-reply p code,
-    .gpt-reply li code {
+    .gpt-reply p > code,
+    .gpt-reply li > code {
         @apply text-sm px-1 border border-divider bg-black text-white;
     }
 
     .gpt-reply ol {
-        @apply list-disc list-inside;
+        @apply list-disc list-inside pl-4;
     }
 
     .gpt-reply ul {
-        @apply list-disc list-inside;
+        @apply list-disc list-inside pl-4;
     }
 }
 

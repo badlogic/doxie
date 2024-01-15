@@ -48,9 +48,10 @@ export function getYearMonthDayString(date: Date): string {
     return `${year}-${month}-${day}`;
 }
 
-export function getTimeDifference(utcTimestamp: number | Date): string {
-    const now = Date.now();
-    const timeDifference = now - (typeof utcTimestamp == "number" ? utcTimestamp : utcTimestamp.getTime());
+export function getTimeDifference(utcTimestamp: number | Date, now: number | Date = Date.now()): string {
+    const startTime = typeof utcTimestamp == "number" ? utcTimestamp : utcTimestamp.getTime();
+    const endTime = typeof now == "number" ? now : now.getTime();
+    const timeDifference = endTime - startTime;
 
     const seconds = Math.floor(timeDifference / 1000);
     if (seconds < 60) {

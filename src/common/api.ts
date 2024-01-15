@@ -35,6 +35,8 @@ export interface SitemapSource extends BaseSource {
     url: string;
     excluded: string[];
     included: string[];
+    titlePath: string;
+    contentPaths: string[];
 }
 
 export interface Collection {

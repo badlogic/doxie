@@ -33,7 +33,7 @@ export class Embedder {
         return result;
     }
 
-    async embedDocuments(docs: EmbedderDocument[]) {
+    async embedDocuments(docs: EmbedderDocument[], shouldStop: () => Promise<boolean> = async () => false) {
         await this.log(`Splitting ${docs.length} docs into segments`);
         let i = 0;
         let totalTokens = 0;
@@ -91,6 +91,7 @@ export class Embedder {
                 processed += batch.segments.length;
                 processedTokens += batch.tokenCount;
                 await this.log(`Embedded ${processed}/${total} segments, ${processedTokens}/${totalTokens} tokens`);
+                if (await shouldStop()) throw new Error("Job stopped by user");
             });
             await Promise.all(promises);
         }

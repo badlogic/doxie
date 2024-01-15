@@ -38,7 +38,7 @@ export interface Messages {
     "Waiting for processing": string;
     Processing: string;
     "Processing failed": (time: number) => string;
-    "Processing succeeded": (time: number) => string;
+    "Processing succeeded": (finishedAt: number, startedAt: number) => string;
     "Processing stopped by user": (time: number) => string;
     Process: string;
     Stop: string;
@@ -55,6 +55,12 @@ export interface Messages {
     tokens: string;
     "Search query ...": string;
     Top: string;
+    "Title CSS selector": string;
+    "Content CSS selectors": string;
+    "Chat with your documents, websites, ...": string;
+    "Chat with ": string;
+    Export: string;
+    Import: "Import";
 }
 
 const english: Messages = {
@@ -95,7 +101,8 @@ const english: Messages = {
     "Waiting for processing": "Waiting for processing",
     Processing: "Processing",
     "Processing failed": (time: number) => "Failed " + getTimeDifference(new Date(time)) + " ago",
-    "Processing succeeded": (time: number) => "Succeeded " + getTimeDifference(new Date(time)) + " ago",
+    "Processing succeeded": (finishedAt: number, startedAt: number) =>
+        "Succeeded " + getTimeDifference(new Date(finishedAt)) + " ago, took " + getTimeDifference(new Date(startedAt), new Date(finishedAt)),
     "Processing stopped by user": (time: number) => "Stopped " + getTimeDifference(new Date(time)) + " ago",
     Process: "Process",
     Stop: "Stop",
@@ -112,6 +119,12 @@ const english: Messages = {
     tokens: "tokens",
     "Search query ...": "Search query ...",
     Top: "Top",
+    "Title CSS selector": "Title CSS selector",
+    "Content CSS selectors": "Content CSS selectors",
+    "Chat with your documents, websites, ...": "Chat with your documents, websites, ...",
+    "Chat with ": "Chat with ",
+    Export: "Export",
+    Import: "Import",
 };
 
 export type LanguageCode = "en";

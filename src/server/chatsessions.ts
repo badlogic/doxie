@@ -215,16 +215,20 @@ Berufsbild Programmierer
             const ids = extractIDs(response);
 
             if (ids.length > 0 && ids.length != 10) {
-                let links = "\n\n**Links**\n";
                 const seenDocs = new Set<string>();
+                let links = "";
                 for (const id of ids) {
                     const doc = context[id];
                     if (!doc) continue;
                     if (seenDocs.has(doc.docUri)) continue;
                     seenDocs.add(doc.docUri);
-                    links += `* [${doc.docTitle}](${doc.docUri})\n`;
+                    if (doc.docUri.startsWith("http")) {
+                        links += `* [${doc.docTitle}](${doc.docUri})\n`;
+                    }
                 }
-                chunkcb(links, "text");
+                if (links.trim().length > 0) {
+                    chunkcb("\n\n**Links**\n" + links, "text");
+                }
             }
         }
 

@@ -100,7 +100,7 @@ export class AdminPage extends BaseElement {
                                 <button class="ml-auto hover:text-primary w-6 h-6 flex items-center justify-center" @click=${(ev: Event) =>
                                     this.deleteCollection(ev, collection)}><i class="icon w-5 h-5">${deleteIcon}</i></button>
                             </div>
-                            <div class="line-clamp-2">${collection.description}</div>
+                            ${collection.description.length > 0 ? html`<div class="line-clamp-2">${collection.description}</div>` : nothing}
                         </div>`
                     )}
                 </div>

@@ -81,6 +81,8 @@ export class SourcePage extends BaseElement {
                     url: "",
                     excluded: [],
                     included: [],
+                    titlePath: "",
+                    contentPaths: [],
                 };
                 return source;
             }
@@ -150,16 +152,23 @@ export class SourcePage extends BaseElement {
         );
         return html`<div class="${pageContainerStyle}">
             ${topBar}
-            <div class="${pageContentStyle} px-4 gap-2 mb-4">
-                <span class="self-start text-xs text-muted-fg font-semibold -mb-4 ml-2 bg-background z-[5] px-1">${i18n("Name")}</span>
+            <div class="${pageContentStyle} px-4 gap-4 mb-4">
+                <source-panel .source=${source}></source-panel>
+                <span class="self-start text-xs text-muted-fg font-semibold -mb-6 ml-2 bg-background z-[5] px-1">${i18n("Name")}</span>
                 <input
                     id="name"
                     class="textfield pt-2 ${source.name.length == 0 ? "border-red-500" : ""}"
                     .value=${source.name}
                     @input=${() => this.handleInput()}
                 />
-                <span class="self-start text-xs text-muted-fg font-semibold -mb-4 ml-2 bg-background z-[5] px-1">${i18n("Description")}</span>
-                <textarea id="description" class="textfield py-3" .value=${source.description} rows="5" @input=${() => this.handleInput()}></textarea>
+                <span class="self-start text-xs text-muted-fg font-semibold -mb-6 ml-2 bg-background z-[5] px-1">${i18n("Description")}</span>
+                <textarea
+                    id="description"
+                    class="textfield py-3 mb-4"
+                    .value=${source.description}
+                    rows="5"
+                    @input=${() => this.handleInput()}
+                ></textarea>
                 ${this.createSourceElement(source)}
             </div>
         </div>`;
@@ -237,14 +246,6 @@ export class FaqSourceEntryElement extends BaseElement {
             <textarea id="questions" class="textfield py-3" .value=${entry.questions} rows="2" @input=${() => this.handleInput()}></textarea>
             <span class="self-start text-xs text-muted-fg font-semibold -mb-4 ml-2 bg-background z-[5] px-1">${i18n("Answer")}</span>
             <textarea id="answer" class="textfield py-3" .value=${entry.answer} rows="5" @input=${() => this.handleInput()}></textarea>
-            <span class="self-start text-xs text-muted-fg font-semibold -mb-4 ml-2 bg-background z-[5] px-1">${i18n("Related URLs")}</span>
-            <textarea
-                id="relatedUrls"
-                class="textfield py-3"
-                .value=${entry.relatedUrls.join("\n")}
-                rows="2"
-                @input=${() => this.handleInput()}
-            ></textarea>
         </div>`;
     }
 
@@ -252,15 +253,9 @@ export class FaqSourceEntryElement extends BaseElement {
         if (!this.entry) return;
         const questions = this.querySelector<HTMLTextAreaElement>("#questions")!.value.trim();
         const answer = this.querySelector<HTMLTextAreaElement>("#answer")!.value.trim();
-        const relatedUrls = this.querySelector<HTMLTextAreaElement>("#relatedUrls")!
-            .value.trim()
-            .split("\n")
-            .map((url) => url.trim())
-            .filter((url) => url.length > 0);
 
         this.entry.questions = questions;
         this.entry.answer = answer;
-        this.entry.relatedUrls = relatedUrls;
     }
 }
 
@@ -347,6 +342,12 @@ export class SitemapSourceElement extends BaseSourceElement {
             <textarea id="included" class="textfield py-2" .value=${source.included.join("\n")} @input=${() => this.handleInput()}></textarea>
             <span class="self-start text-xs text-muted-fg font-semibold -mb-4 ml-2 bg-background z-[5] px-1">${i18n("Excluded patterns")}</span>
             <textarea id="excluded" class="textfield py-2" .value=${source.excluded.join("\n")} @input=${() => this.handleInput()}></textarea>
+            <span class="self-start text-xs text-muted-fg font-semibold -mb-4 ml-2 bg-background z-[5] px-1">${i18n("Title CSS selector")}</span>
+            <input id="titlePath" class="textfield py-2 ${source.titlePath.length == 0 ? "border-red-500" : ""}" .value=${
+            source.titlePath
+        } @input=${() => this.handleInput()}></textarea>
+            <span class="self-start text-xs text-muted-fg font-semibold -mb-4 ml-2 bg-background z-[5] px-1">${i18n("Content CSS selectors")}</span>
+            <textarea id="contentPaths" class="textfield py-2" .value=${source.contentPaths.join("\n")} @input=${() => this.handleInput()}></textarea>
             <button class="button self-start" @click=${() => this.test()}>${i18n("Test")}</button>
             ${
                 // prettier-ignore
@@ -370,16 +371,24 @@ export class SitemapSourceElement extends BaseSourceElement {
             .split("\n")
             .map((url) => url.trim())
             .filter((url) => url.length > 0);
+        const titlePath = this.querySelector<HTMLInputElement>("#titlePath")!.value.trim();
+        const contentPaths = this.querySelector<HTMLTextAreaElement>("#contentPaths")
+            ?.value.trim()
+            .split("\n")
+            .map((url) => url.trim())
+            .filter((url) => url.length > 0);
         this.source.url = url.trim();
         this.source.included = included ?? [];
         this.source.excluded = excluded ?? [];
+        this.source.titlePath = titlePath;
+        this.source.contentPaths = contentPaths ?? [];
         this.page?.requestUpdate();
         this.requestUpdate();
     }
 
     canSave(): boolean {
         if (!this.source) return false;
-        return this.source.url.length > 0;
+        return this.source.url.length > 0 && this.source.titlePath.length > 0;
     }
 
     async test() {

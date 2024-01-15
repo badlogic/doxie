@@ -77,6 +77,16 @@ function logError(endpoint: string, message: string, e: any) {
         if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
         try {
             const token = req.headers.authorization!;
+            if (token == "noauth") {
+                apiSuccess<Collection[]>(
+                    res,
+                    (await database.getCollections()).map((collection) => {
+                        return { ...collection, systemPrompt: "" };
+                    })
+                );
+                return;
+            }
+
             if (token != adminToken) throw new Error("Inavlid admin token");
             apiSuccess<Collection[]>(res, await database.getCollections());
         } catch (e) {

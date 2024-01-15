@@ -642,7 +642,7 @@ export class DropdownButton<T> extends LitElement {
     }
 
     render() {
-        return html` <button @click="${this.toggleDropdown}">${this.content}</button> `;
+        return html` <button class="flex items-center" @click="${this.toggleDropdown}">${this.content}</button> `;
     }
 }
 
