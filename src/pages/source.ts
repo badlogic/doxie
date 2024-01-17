@@ -2,7 +2,7 @@ import { html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { BaseElement, renderTopbar, closeButton, renderError } from "../app";
 import { appState } from "../appstate";
-import { Source, FaqSource, FlarumSource, Api, FaqSourceEntry, SitemapSource } from "../common/api";
+import { Source, FaqSource, FlarumSource, Api, FaqSourceEntry, SitemapSource, MarkdownZipSource, apiPost } from "../common/api";
 import { i18n } from "../utils/i18n";
 import { router } from "../utils/routing";
 import { Store } from "../utils/store";
@@ -12,6 +12,7 @@ import { repeat } from "lit-html/directives/repeat.js";
 import { addIcon, deleteIcon } from "../utils/icons";
 import { v4 as uuid } from "uuid";
 import minimatch from "minimatch";
+import { unsafeHTML } from "lit-html/directives/unsafe-html.js";
 
 @customElement("source-page")
 export class SourcePage extends BaseElement {
@@ -86,6 +87,16 @@ export class SourcePage extends BaseElement {
                 };
                 return source;
             }
+            case "markdownzip": {
+                const source: MarkdownZipSource = {
+                    type: "markdownzip",
+                    collectionId,
+                    name: "",
+                    description: "",
+                    file: "",
+                };
+                return source;
+            }
             default:
                 assertNever(type);
         }
@@ -117,6 +128,8 @@ export class SourcePage extends BaseElement {
                 return html`<faq-source .source=${this.source} .page=${this}></faq-source>`;
             case "sitemap":
                 return html`<sitemap-source .source=${this.source} .page=${this}></sitemap-source>`;
+            case "markdownzip":
+                return html`<markdownzip-source .source=${this.source} .page=${this}></markdownzip-source>`;
             default:
                 assertNever(type);
         }
@@ -131,6 +144,8 @@ export class SourcePage extends BaseElement {
                 return this.querySelector<FaqSourceElement>("faq-source");
             case "sitemap":
                 return this.querySelector<SitemapSourceElement>("sitemap-source");
+            case "markdownzip":
+                return this.querySelector<MarkdownZipSourceElement>("markdownzip-source");
             default:
                 assertNever(type);
         }
@@ -311,13 +326,108 @@ export class FaqSourceElement extends BaseSourceElement {
 @customElement("flarum-source")
 export class FlarumSourceElement extends BaseSourceElement {
     @property()
-    source?: FlarumSourceElement;
+    source?: FlarumSource;
 
     render() {
         return html`<div>Flarum source</div>`;
     }
 
     canSave(): boolean {
+        return true;
+    }
+}
+
+@customElement("markdownzip-source")
+export class MarkdownZipSourceElement extends BaseSourceElement {
+    @property()
+    source?: MarkdownZipSource;
+
+    @state()
+    error?: string;
+
+    @state()
+    isUploading = false;
+
+    render() {
+        const source = this.source;
+        if (!source) return html``;
+
+        if (this.isUploading)
+            return html` <div class="flex flex-col gap-2">
+                <span class="self-start text-xs text-muted-fg font-semibold bg-background z-[5] px-1">${i18n("Markdown ZIP file")}</span>
+                <loading-spinner></loading-spinner>
+            </div>`;
+
+        return html` <div class="flex flex-col gap-2">
+            <div class="text-muted-fg text-xs italic">${unsafeHTML(i18n("markdownZipFormat"))}</div>
+            ${this.error ? renderError(this.error) : nothing}
+            ${source.file.length != 0
+                ? html`<span class="self-start text-xs text-muted-fg font-semibold bg-background z-[5] px-1">${i18n("Markdown ZIP file")}</span>
+                      <div class="flex gap-2">
+                          <a class="text-blue-500" target="_blank" href="/files/${source.file}">${source.file}</a>
+                          <button
+                              class="ml-auto hover:text-primary w-6 h-6 flex items-center justify-center"
+                              @click=${(ev: Event) => this.deleteZip()}
+                          >
+                              <i class="icon w-5 h-5">${deleteIcon}</i>
+                          </button>
+                      </div>`
+                : html` <span class="self-start text-xs text-muted-fg font-semibold -mb-4 ml-2 bg-background z-[5] px-1"
+                          >${i18n("Markdown ZIP file")}</span
+                      >
+                      <div
+                          class="border border-divider border-dashed border-1 hover:border-primary cursor-pointer rounded-md text-center px-4 py-12"
+                          @click=${() => this.uploadZip()}
+                      >
+                          ${i18n("Click or drag and drop .zip file containing .md files")}
+                      </div>`}
+        </div>`;
+    }
+
+    deleteZip() {
+        if (!this.source) return;
+        this.source.file = "";
+        this.page?.requestUpdate();
+        this.requestUpdate();
+    }
+
+    uploadZip() {
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = ".zip";
+
+        input.onchange = async (e: Event) => {
+            const target = e.target as HTMLInputElement;
+            const file = target?.files ? target.files[0] : undefined;
+            if (!file) {
+                this.error = i18n("Could not upload .zip");
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append("file", file);
+            this.isUploading = true;
+            try {
+                const response = await apiPost<string>("upload", formData, Store.getAdminToken()!);
+                if (response.success) {
+                    this.source!.file = response.data;
+                    this.page?.requestUpdate();
+                    this.requestUpdate();
+                } else {
+                    this.error = i18n("Could not upload .zip");
+                }
+            } catch (error) {
+                this.error = i18n("Could not upload .zip");
+            } finally {
+                this.isUploading = false;
+            }
+        };
+
+        input.click();
+    }
+
+    canSave(): boolean {
+        if (!this.source) return false;
         return true;
     }
 }

@@ -772,15 +772,17 @@ export function fixLinksAndVideos(container: HTMLElement, collapsed = false) {
                 link.setAttribute("target", "_blank");
                 link.setAttribute("rel", "noopener noreferrer");
             } else {
-                link.addEventListener("click", (ev) => {
-                    ev.preventDefault();
-                    ev.stopPropagation();
-                    ev.stopImmediatePropagation();
-                    if (link.pathname == location.pathname) return;
-                    const navs = new Set<string>(["/home", "/settings", "/hashtags", "/lists", "/feeds", "/search", "/notifications"]);
+                if (!router.isIgnored(link.pathname)) {
+                    link.addEventListener("click", (ev) => {
+                        ev.preventDefault();
+                        ev.stopPropagation();
+                        ev.stopImmediatePropagation();
+                        if (link.pathname == location.pathname) return;
+                        const navs = new Set<string>(["/home", "/settings", "/hashtags", "/lists", "/feeds", "/search", "/notifications"]);
 
-                    router.push(link.pathname);
-                });
+                        router.push(link.pathname);
+                    });
+                }
             }
             link.addEventListener("click", (ev) => {
                 ev.stopPropagation();

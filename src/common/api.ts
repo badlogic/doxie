@@ -1,7 +1,7 @@
 import { error } from "../utils/utils.js";
 import { ErrorReason } from "./errors.js";
 
-export type Source = FlarumSource | FaqSource | SitemapSource;
+export type Source = FlarumSource | FaqSource | SitemapSource | MarkdownZipSource;
 
 export type Logger = (message: string) => Promise<void>;
 
@@ -37,6 +37,11 @@ export interface SitemapSource extends BaseSource {
     included: string[];
     titlePath: string;
     contentPaths: string[];
+}
+
+export interface MarkdownZipSource extends BaseSource {
+    type: "markdownzip";
+    file: string;
 }
 
 export interface Collection {

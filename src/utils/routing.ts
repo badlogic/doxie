@@ -30,6 +30,7 @@ export class Router {
     modals: HTMLElement[] = [];
     outlet = document.body;
     listeners: ((pathname: string) => void)[] = [];
+    ignorePaths: RegExp[] = [];
 
     constructor() {
         window.addEventListener("popstate", (ev) => this.handleNavigation(ev));
@@ -62,7 +63,12 @@ export class Router {
         this.routes.push(route);
     }
 
+    addIgnoredPath(path: string) {
+        this.ignorePaths.push(pathToRegexp(path));
+    }
+
     replace(path: string) {
+        if (this.isIgnored(path)) return true;
         const page = this.pageStack.pop();
         page?.page.remove();
         if (this.navigateTo(path)) {
@@ -75,10 +81,12 @@ export class Router {
     }
 
     replaceUrl(path: string) {
+        if (this.isIgnored(path)) return true;
         history.replaceState({ page: history.state?.page ?? this.pageStack.length }, "", path);
     }
 
     push(path: string) {
+        if (this.isIgnored(path)) return true;
         if (location.pathname == path) return;
         history.pushState({ page: this.pageStack.length + 1 }, "", path);
         const route = this.matchRoute(path);
@@ -140,6 +148,16 @@ export class Router {
 
     setOutlet(outlet: HTMLElement) {
         this.outlet = outlet;
+    }
+
+    isIgnored(path: string) {
+        for (const ignoredPath of this.ignorePaths) {
+            const match = ignoredPath.exec(path);
+            if (match) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private notifyListeners(pathname: string) {

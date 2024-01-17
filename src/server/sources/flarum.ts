@@ -73,34 +73,21 @@ async function fetchObjects<T>(apiUrl: string, type: "discussions" | "posts" | "
 }
 
 (async () => {
-    if (process.argv.length != 4) {
-        console.log("Usage: node flarum <api-url> <output-file>");
+    if (process.argv.length < 5) {
+        console.log("Usage: node flarum <api-url> <output-file> <usernames>+");
         process.exit(-1);
     }
     let apiUrl = process.argv[2];
     const outputFile = process.argv[3];
     if (!apiUrl.endsWith("/")) apiUrl += "/";
 
-    // Fetch all discussions and posts
-    const promises = await Promise.all([fetchObjects(apiUrl, "discussions", outputFile), fetchObjects(apiUrl, "posts", outputFile)]);
+    const discussionIds = new Set<string>();
 
-    /*const docs: EmbedderDocument[] = [];
-    for (const discussion of discussions) {
-        if (!discussion.included) continue;
-        for (const post of discussion.included.filter((obj) => obj.type == "posts")) {
-            let content = post.attributes.content ?? post.attributes.contentHtml;
-            if (typeof content != "string") continue;
-            if (!post.relationships) continue;
-            if (!post.relationships.discussion) continue;
-            if (!post.relationships.discussion.data) continue;
-            content = content.replace(/<[^>]*>/g, "");
-            docs.push({
-                uri: apiUrl.replaceAll("api/", "") + post.relationships.discussion.data.id + "/" + post.id,
-                text: content,
-                title: content.substring(0, Math.min(content.length, 30)),
-                segments: [],
-            });
-        }
+    for (let i = 4; i < process.argv.length; i++) {
+        const username = process.argv[i];
+        console.log("Fetching discussions by " + username);
     }
-    fs.writeFileSync(outputFile + ".embedderinput.json", JSON.stringify(docs, null, 2), "utf-8");*/
+
+    // Fetch all discussions and posts
+    // const promises = await Promise.all([fetchObjects(apiUrl, "discussions", outputFile), fetchObjects(apiUrl, "posts", outputFile)]);
 })();

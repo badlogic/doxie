@@ -22,6 +22,9 @@ export class App extends LitElement {
 
     protected firstUpdated(_changedProperties: PropertyValueMap<any> | Map<PropertyKey, unknown>): void {
         super.firstUpdated(_changedProperties);
+
+        router.addIgnoredPath("/files/:name");
+
         router.addRoute(
             "/",
             () => html`<main-page></main-page>`,

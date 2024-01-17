@@ -70,6 +70,10 @@ export interface Messages {
     "Chatbot CSS": string;
     "Could not export collection": string;
     "Could not import collection": string;
+    "Markdown ZIP file": string;
+    "Click or drag and drop .zip file containing .md files": string;
+    "Could not upload .zip": string;
+    markdownZipFormat: string;
 }
 
 const english: Messages = {
@@ -143,6 +147,14 @@ const english: Messages = {
     "Chatbot CSS": "Chatbot CSS",
     "Could not export collection": "Could not export collection",
     "Could not import collection": "Could not import collection",
+    "Markdown ZIP file": "Markdown ZIP file",
+    "Click or drag and drop .zip file containing .md files": "Click or drag and drop .zip file containing .md files",
+    "Could not upload .zip": "Could not upload .zip",
+    markdownZipFormat: `<div>.md file Format<div><pre class="hljs p-4 rounded-md">url
+
+[title]
+[[description]]
+... actual content ...<code></code></pre>`,
 };
 
 export type LanguageCode = "en";

@@ -8,6 +8,7 @@ const config = {
     entryPoints: {
         server: "src/server/server.ts",
         processor: "src/server/processor.ts",
+        flarum: "src/server/sources/flarum.ts",
     },
     bundle: true,
     sourcemap: true,

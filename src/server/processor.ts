@@ -1,7 +1,18 @@
 import * as fs from "fs";
 import { Database } from "./database";
 import { Rag } from "./rag";
-import { BaseSource, EmbedderDocument, FaqSource, FlarumSource, Logger, ProcessingJob, SitemapSource, VectorMetadata } from "../common/api";
+import {
+    BaseSource,
+    EmbedderDocument,
+    EmbedderDocumentSegment,
+    FaqSource,
+    FlarumSource,
+    Logger,
+    MarkdownZipSource,
+    ProcessingJob,
+    SitemapSource,
+    VectorMetadata,
+} from "../common/api";
 import { Collection as MongoCollection, ObjectId, Document } from "mongodb";
 import { assertNever, sleep } from "../utils/utils";
 import { Embedder } from "./embedder";
@@ -13,6 +24,29 @@ import { DOMParser } from "xmldom";
 import { parseDocument } from "htmlparser2";
 import domSerializer from "dom-serializer";
 import { removeElement } from "domutils";
+import * as JSZip from "jszip";
+import { Tiktoken, getEncoding } from "js-tiktoken";
+import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
+
+async function recursiveSplit(doc: EmbedderDocument, chunkSize = 512, chunkOverlap = 0) {
+    const splitter = new RecursiveCharacterTextSplitter({
+        chunkSize,
+        chunkOverlap,
+    });
+
+    const segments: { text: string; tokenCount: number; embedding: number[] }[] = [];
+    const textSplits = await splitter.splitText(doc.text);
+    for (const split of textSplits) {
+        const tokenCount = Embedder.tokenize(split).length;
+        segments.push({ text: split, tokenCount, embedding: [] });
+    }
+    doc.segments = segments;
+}
+
+function countHashAtBeginning(line: string): number {
+    const match = line.match(/^#+/);
+    return match ? match[0].length : 0;
+}
 
 function normalizeHtml(html: string): string {
     const dom = parseDocument(html, {
@@ -100,12 +134,18 @@ class FaqProccessor extends BaseProcessor<FaqSource> {
             documents.push({
                 uri: "faq://" + this.source._id + "/" + entry.id,
                 text: entry.questions + "\n\n" + entry.answer,
-                title: this.source.name + " " + entry.id,
+                title: entry.questions,
                 segments: [],
             });
         }
         const embedder = new Embedder(this.processor.openaiKey, this.log);
-        await embedder.embedDocuments(documents, this.shouldStop, false);
+        await embedder.embedDocuments(documents, this.shouldStop, async (doc) => {
+            const tokenCount = Embedder.tokenize(doc.text).length;
+            if (tokenCount > 500) {
+                throw new Error("Token count of FAQ entry '" + doc.title + "' > 500, make it smaller.");
+            }
+            doc.segments = [{ text: doc.text, tokenCount, embedding: [] }];
+        });
         return documents;
     }
 }
@@ -113,6 +153,114 @@ class FaqProccessor extends BaseProcessor<FaqSource> {
 class FlarumProccessor extends BaseProcessor<FlarumSource> {
     process(): Promise<EmbedderDocument[]> {
         throw new Error("Method not implemented.");
+    }
+}
+
+class MarkdownZipProccessor extends BaseProcessor<MarkdownZipSource> {
+    async process(): Promise<EmbedderDocument[]> {
+        const filePath = "html/files/" + this.source.file;
+        if (!fs.existsSync(filePath)) {
+            throw new Error("Could not find file " + this.source.file);
+        }
+
+        const data = fs.readFileSync(filePath);
+        const zip = await JSZip.loadAsync(data);
+        const documents: EmbedderDocument[] = [];
+        const tiktoken = getEncoding("cl100k_base");
+        const files = Object.keys(zip.files);
+        for (const relativePath of files) {
+            if (relativePath.includes("__MACOSX/")) continue;
+            if (relativePath.endsWith(".md")) {
+                const file = zip.files[relativePath];
+                const content = await file.async("string");
+                // Extract URL and title
+                const lines = content.replaceAll("\r", "").split("\n");
+                const url = lines[0].trim();
+                const title = lines[2].trim().replace("[", "").replace("]", "");
+
+                // Remove the block until '[[]]'
+                const endIndex = lines[3].startsWith("[[") && lines[3].trim().endsWith("]]") ? 3 : -1;
+                if (endIndex == -1) throw new Error("Couldn't find header marker [[]] in " + relativePath + "\n" + lines.slice(0, 10).join("\n"));
+                const modifiedContent = lines
+                    .slice(endIndex + 1)
+                    .join("\n")
+                    .trim(); // +4 to remove '[[]]' itself
+
+                const doc: EmbedderDocument = {
+                    uri: url,
+                    title,
+                    text: modifiedContent,
+                    segments: [],
+                };
+                documents.push(doc);
+                await this.log("Processing " + relativePath + ", " + tiktoken.encode(modifiedContent).length + " tokens");
+            }
+        }
+
+        const embedder = new Embedder(this.processor.openaiKey, this.log);
+        await embedder.embedDocuments(documents, this.shouldStop, async (doc) => {
+            const segments = doc.segments;
+            const lines = doc.text.split("\n");
+            const title: string[] = [];
+            let currText = "";
+            if (doc.uri == "http://esotericsoftware.com/spine-slots") {
+                console.log("test");
+            }
+            while (lines.length > 0) {
+                const line = lines.splice(0, 1)[0];
+                const hashes = countHashAtBeginning(line.trim());
+                if (hashes == 0) {
+                    currText += line + "\n";
+                } else {
+                    if (currText.length > 0) {
+                        const tokenCount = Embedder.tokenize(currText).length;
+                        if (tokenCount > 500) {
+                            const t = doc.title + "\n" + title.join("\n") + "\n";
+                            currText = currText.replace(t, "").trim();
+                            const tmpDoc: EmbedderDocument = { uri: doc.uri, title: doc.title, text: currText, segments: [] };
+                            await recursiveSplit(tmpDoc, 1024, 0);
+
+                            for (const segment of tmpDoc.segments) {
+                                segment.text = (t + segment.text).trim();
+                                segments.push(segment);
+                            }
+                        } else {
+                            segments.push({ text: currText.trim(), tokenCount, embedding: [] });
+                        }
+                    }
+
+                    if (hashes > title.length) {
+                        title.push(line.trim());
+                    } else {
+                        if (title.length > 0) {
+                            while (title.length > 0 && countHashAtBeginning(title[title.length - 1]) >= hashes) {
+                                title.pop();
+                            }
+                        }
+                        title.push(line.trim());
+                    }
+                    currText = doc.title + "\n" + title.join("\n") + "\n";
+                }
+            }
+
+            if (currText.length > 0) {
+                const tokenCount = Embedder.tokenize(currText).length;
+                if (tokenCount > 500) {
+                    const t = doc.title + "\n" + title.join("\n") + "\n";
+                    currText = currText.replace(t, "").trim();
+                    const tmpDoc: EmbedderDocument = { uri: doc.uri, title: doc.title, text: currText, segments: [] };
+                    await recursiveSplit(tmpDoc, 1024, 0);
+
+                    for (const segment of tmpDoc.segments) {
+                        segment.text = (t + segment.text).trim();
+                        segments.push(segment);
+                    }
+                } else {
+                    segments.push({ text: currText.trim(), tokenCount, embedding: [] });
+                }
+            }
+        });
+        return documents;
     }
 }
 
@@ -181,7 +329,7 @@ class SitemapProccessor extends BaseProcessor<SitemapSource> {
             if (await this.shouldStop()) throw new Error("Job stopped by user");
         }
         const embedder = new Embedder(this.processor.openaiKey, this.log);
-        await embedder.embedDocuments(documents, this.shouldStop);
+        await embedder.embedDocuments(documents, this.shouldStop, (doc) => recursiveSplit(doc, 512, 0));
         return documents;
     }
 }
@@ -252,6 +400,10 @@ class Processor {
                             }
                             case "sitemap": {
                                 docs.push(...(await new SitemapProccessor(this, source, logger, shouldStop).process()));
+                                break;
+                            }
+                            case "markdownzip": {
+                                docs.push(...(await new MarkdownZipProccessor(this, source, logger, shouldStop).process()));
                                 break;
                             }
                             default:

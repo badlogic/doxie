@@ -222,9 +222,10 @@ export class CollectionPage extends BaseElement {
                                       <i class="icon w-5 h-5">${addIcon}</i><span>${i18n("New")}</span>
                                   </div>`}
                                   .values=${[
-                                      { label: "Flarum", value: "flarum" },
+                                      // { label: "Flarum", value: "flarum" },
                                       { label: "FAQ", value: "faq" },
                                       { label: "Sitemap", value: "sitemap" },
+                                      { label: "Markdown ZIP", value: "markdownzip" },
                                   ]}
                                   .onSelected=${(sourceType: { value: string; label: string }) => this.addSource(sourceType)}
                               >
@@ -501,7 +502,7 @@ export class SourcePanel extends BaseElement {
         } else {
             return html`<div class="flex flex-col gap-2">
                 ${this.error ? renderError(this.error) : nothing}
-                <button class="self-start button mx-2" @click=${(ev: Event) => this.process(ev, false)}>${i18n("Process")}</button>
+                <button class="self-start button" @click=${(ev: Event) => this.process(ev, false)}>${i18n("Process")}</button>
             </div>`;
         }
     }

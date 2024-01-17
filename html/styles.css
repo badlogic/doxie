@@ -117,13 +117,6 @@
         @apply disabled:text-muted-fg disabled:border-muted-fg;
     }
 
-    .button-muted {
-        @apply border border-muted text-muted-fg rounded-md px-4 py-2 outline-none;
-        @apply focus:text-muted-fg focus:border-muted;
-        @apply hover:text-primarysw-600 hover:border-primarysw-600;
-        @apply active:text-primarysw-700 active:border-primarysw-700;
-    }
-
     .textfield {
         @apply px-2 py-1 bg-transparent dark:text-white border border-divider rounded-md focus:border-primary focus:outline-none;
     }
@@ -140,7 +133,7 @@
         height: auto !important;
     }
 
-    .gpt-reply a {
+    .chat-message-bot a {
         @apply text-blue-500;
     }
 
@@ -148,24 +141,24 @@
         @apply max-w-full text-xs rounded-md overflow-auto mt-2;
     }
 
-    .gpt-reply pre {
+    .chat-message-bot pre {
         @apply max-w-full text-xs rounded-md overflow-auto mt-2 hljs w-full p-4;
     }
 
-    .gpt-reply p:not(:first-child) {
+    .chat-message-bot p:not(:first-child) {
         @apply mt-2;
     }
 
-    .gpt-reply p > code,
-    .gpt-reply li > code {
+    .chat-message-bot p > code,
+    .chat-message-bot li > code {
         @apply text-sm px-1 border border-divider bg-black text-white;
     }
 
-    .gpt-reply ol {
+    .chat-message-bot ol {
         @apply list-disc list-inside pl-4;
     }
 
-    .gpt-reply ul {
+    .chat-message-bot ul {
         @apply list-disc list-inside pl-4;
     }
 }

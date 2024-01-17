@@ -1,9 +1,8 @@
-import { encode } from "gpt-tokenizer";
-import OpenAI from "openai";
 import * as fs from "fs";
-import { BufferedOutputStream, BufferedInputStream, MemoryBuffer } from "./binarystream";
+import { getEncoding } from "js-tiktoken";
+import OpenAI from "openai";
 import { EmbedderDocument, EmbedderDocumentSegment, Logger } from "../common/api";
-import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
+import { BufferedInputStream, BufferedOutputStream, MemoryBuffer } from "./binarystream";
 
 // A little less than what's allowed, as the tokenizer might not be accurate
 const maxTokens = 7000;
@@ -15,6 +14,7 @@ export interface EmbedderBatch {
 
 export class Embedder {
     readonly openaiApi: OpenAI;
+    static readonly tiktoken = getEncoding("cl100k_base");
 
     constructor(readonly openaiKey: string, readonly log: Logger) {
         this.openaiApi = new OpenAI({
@@ -22,8 +22,8 @@ export class Embedder {
         });
     }
 
-    tokenize(text: string) {
-        const tokens = encode(text);
+    static tokenize(text: string) {
+        const tokens = this.tiktoken.encode(text);
         return tokens;
     }
 
@@ -33,17 +33,16 @@ export class Embedder {
         return result;
     }
 
-    async embedDocuments(docs: EmbedderDocument[], shouldStop: () => Promise<boolean> = async () => false, split = true) {
+    async embedDocuments(
+        docs: EmbedderDocument[],
+        shouldStop: () => Promise<boolean> = async () => false,
+        splitter: (doc: EmbedderDocument) => Promise<void>
+    ) {
         await this.log(`Splitting ${docs.length} docs into segments`);
         let i = 0;
         let totalTokens = 0;
         for (const doc of docs) {
-            if (split) {
-                await this.splitIntoSegments(doc);
-            } else {
-                const tokenCount = this.tokenize(doc.text).length;
-                doc.segments.push({ text: doc.text, tokenCount, embedding: [] });
-            }
+            await splitter(doc);
             for (const segment of doc.segments) {
                 totalTokens += segment.tokenCount;
             }
@@ -100,127 +99,5 @@ export class Embedder {
             });
             await Promise.all(promises);
         }
-    }
-
-    private async splitIntoSegments(doc: EmbedderDocument) {
-        const splitter = new RecursiveCharacterTextSplitter({
-            chunkSize: 512,
-            chunkOverlap: 0,
-        });
-
-        const segments: { text: string; tokenCount: number; embedding: number[] }[] = [];
-        const textSplits = await splitter.splitText(doc.text);
-        for (const split of textSplits) {
-            const tokenCount = this.tokenize(split).length;
-            segments.push({ text: split, tokenCount, embedding: [] });
-        }
-        doc.segments = segments;
-    }
-
-    async writeDocuments(file: string, docs: EmbedderDocument[]): Promise<void> {
-        const bs = new BufferedOutputStream(file);
-        await bs.open();
-
-        await bs.writeInt32(docs.length);
-        let i = 0;
-        for (const doc of docs) {
-            await bs.writeString(doc.uri);
-            await bs.writeString(doc.title);
-            await bs.writeInt32(doc.segments.length);
-            for (const segment of doc.segments) {
-                await bs.writeString(segment.text);
-                await bs.writeInt32(segment.tokenCount);
-                await bs.writeInt32(segment.embedding.length);
-                await bs.writeDoubleArray(segment.embedding);
-            }
-            await this.log(`Wrote ${++i}/${docs.length} document embeddings`);
-        }
-
-        await bs.close();
-    }
-
-    async readDocuments(file: string): Promise<EmbedderDocument[]> {
-        const bs = new BufferedInputStream(file);
-        await bs.open();
-
-        const numDocs = await bs.readInt32();
-        const docs: EmbedderDocument[] = [];
-        for (let i = 0; i < numDocs; i++) {
-            const uri = await bs.readString();
-            const title = await bs.readString();
-            const numSegments = await bs.readInt32();
-            const segments: EmbedderDocumentSegment[] = [];
-            for (let j = 0; j < numSegments; j++) {
-                const text = await bs.readString();
-                const tokenCount = await bs.readInt32();
-                const numDimensions = await bs.readInt32();
-                const embedding: number[] = await bs.readDoubleArray(numDimensions);
-                segments.push({ text, tokenCount, embedding, index: j });
-            }
-            const doc: EmbedderDocument = { uri, text: "", title, segments };
-            for (const segment of doc.segments) {
-                segment.doc = doc;
-            }
-            const docVec: number[] = new Array<number>(doc.segments[0].embedding.length);
-            docVec.fill(0);
-            for (const segment of doc.segments) {
-                const segVec = segment.embedding;
-                for (let i = 0; i < docVec.length; i++) {
-                    docVec[i] += segVec[i];
-                }
-            }
-            for (let i = 0; i < docVec.length; i++) {
-                docVec[i] /= doc.segments.length;
-            }
-            doc.embedding = docVec;
-            docs.push(doc);
-            if (i % 100 == 0) await this.log(`Read ${docs.length}/${numDocs} document embeddings`);
-        }
-        await bs.close();
-        return docs;
-    }
-
-    async readDocumentsInMemory(file: string) {
-        const fileBuffer = fs.readFileSync(file);
-        const mb = new MemoryBuffer(fileBuffer);
-
-        const numDocs = await mb.readInt32();
-        const docs = [];
-
-        for (let i = 0; i < numDocs; i++) {
-            const uri = await mb.readString();
-            const title = await mb.readString();
-            const numSegments = await mb.readInt32();
-            const segments = [];
-
-            for (let j = 0; j < numSegments; j++) {
-                const text = await mb.readString();
-                const tokenCount = await mb.readInt32();
-                const numDimensions = await mb.readInt32();
-                const embedding = await mb.readDoubleArray(numDimensions);
-                segments.push({ text, tokenCount, embedding, index: j });
-            }
-
-            const doc: EmbedderDocument = { uri, text: "", title, segments };
-            for (const segment of doc.segments) {
-                segment.doc = doc;
-            }
-
-            const docVec = new Array(doc.segments[0].embedding.length).fill(0);
-            for (const segment of doc.segments) {
-                const segVec = segment.embedding;
-                for (let k = 0; k < docVec.length; k++) {
-                    docVec[k] += segVec[k];
-                }
-            }
-            for (let k = 0; k < docVec.length; k++) {
-                docVec[k] /= doc.segments.length;
-            }
-            doc.embedding = docVec;
-            docs.push(doc);
-
-            if (i % 100 == 0) await this.log(`Read ${docs.length}/${numDocs} document embeddings`);
-        }
-        return docs;
     }
 }
