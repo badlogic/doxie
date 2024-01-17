@@ -1,7 +1,7 @@
 import { TemplateResult, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { map } from "lit/directives/map.js";
-import { BaseElement, chatDefaultCss, closeButton, dom, renderError, renderTopbar, toast } from "../app.js";
+import { BaseElement, chatDefaultCss, closeButton, dom, downloadJson, renderError, renderTopbar, toast, uploadJson } from "../app.js";
 import { appState } from "../appstate.js";
 import { Api, ChatSession, Collection, ProcessingJob, Source, VectorDocument, apiPost } from "../common/api.js";
 import { i18n } from "../utils/i18n.js";
@@ -12,41 +12,6 @@ import { pageContainerStyle, pageContentStyle } from "../utils/styles.js";
 import { repeat } from "lit-html/directives/repeat.js";
 import { Stream } from "../utils/streams.js";
 import { StreamView } from "../utils/streamviews.js";
-
-function downloadJson(obj: any, filename: string): void {
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(obj, null, 2));
-    const downloadAnchorNode = document.createElement("a");
-    downloadAnchorNode.setAttribute("href", dataStr);
-    downloadAnchorNode.setAttribute("download", filename + ".json");
-    document.body.appendChild(downloadAnchorNode); // required for Firefox
-    downloadAnchorNode.click();
-    downloadAnchorNode.remove();
-}
-
-function uploadJson(callback: (data: any) => void): void {
-    const inputElement = document.createElement("input");
-    inputElement.type = "file";
-    inputElement.accept = ".json";
-
-    inputElement.addEventListener("change", (event) => {
-        const fileReader = new FileReader();
-        fileReader.onload = (e) => {
-            try {
-                const jsonData = JSON.parse(e.target?.result as string);
-                callback(jsonData);
-            } catch (error) {
-                console.error("Error parsing JSON:", error);
-            }
-        };
-
-        const files = (event.target as HTMLInputElement).files;
-        if (files && files[0]) {
-            fileReader.readAsText(files[0]);
-        }
-    });
-
-    inputElement.click();
-}
 
 @customElement("collection-page")
 export class CollectionPage extends BaseElement {

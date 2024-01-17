@@ -1,11 +1,11 @@
 import { LitElement, PropertyValueMap, html, nothing, render } from "lit";
-import { BaseElement, closeButton, renderError, renderTopbar } from "../app.js";
+import { BaseElement, closeButton, downloadJson, renderError, renderTopbar, toast, uploadJson } from "../app.js";
 import { customElement, state } from "lit/decorators.js";
 import { pageContainerStyle, pageContentStyle } from "../utils/styles.js";
 import { Store } from "../utils/store.js";
 import { i18n } from "../utils/i18n.js";
-import { Api, Collection } from "../common/api.js";
-import { addIcon, deleteIcon, plusIcon } from "../utils/icons.js";
+import { Api, Collection, Source } from "../common/api.js";
+import { addIcon, deleteIcon, downloadIcon, plusIcon } from "../utils/icons.js";
 import { map } from "lit/directives/map.js";
 import { appState } from "../appstate.js";
 
@@ -82,9 +82,12 @@ export class AdminPage extends BaseElement {
         return html`<div class="${pageContainerStyle}">
             ${renderTopbar("Admin", closeButton())}
             <div class="${pageContentStyle} px-4 gap-4">
-                <div class="flex">
+                <div class="flex gap-2">
                     <h1>${i18n("Collections")}</h1>
-                    <a href="collections/new" class="ml-auto self-start flex px-2 py-1 items-center gap-1 hover:text-primary">
+                    <button class="ml-auto hover:text-primary flex items-center gap-1" @click=${(ev: Event) => this.import(ev)}>
+                        <i class="icon w-5 h-5">${downloadIcon}</i><span>${i18n("Import")}</span>
+                    </button>
+                    <a href="collections/new" class="self-start flex px-2 py-1 items-center gap-1 hover:text-primary">
                         <i class="icon w-5 h-5">${addIcon}</i><span>${i18n("New")}</span>
                     </a>
                 </div>
@@ -95,9 +98,13 @@ export class AdminPage extends BaseElement {
                         (collection) => html`<a href="/collections/${encodeURIComponent(
                             collection._id ?? ""
                         )}" class="px-4 py-2 flex flex-col gap-2 border border-divider rounded-md underline-none hover:border-primary">
-                            <div class="flex">
+                            <div class="flex gap-2">
                                 <span class="font-semibold">${collection.name}</span>
-                                <button class="ml-auto hover:text-primary w-6 h-6 flex items-center justify-center" @click=${(ev: Event) =>
+                                <button class="ml-auto hover:text-primary flex items-center gap-1" @click=${(ev: Event) =>
+                                    this.export(ev, collection)}>
+                                    <i class="icon w-5 h-5">${downloadIcon}</i><span>${i18n("Export")}</span>
+                                </button>
+                                <button class="hover:text-primary w-6 h-6 flex items-center justify-center" @click=${(ev: Event) =>
                                     this.deleteCollection(ev, collection)}><i class="icon w-5 h-5">${deleteIcon}</i></button>
                             </div>
                             ${collection.description.length > 0 ? html`<div class="line-clamp-2">${collection.description}</div>` : nothing}
@@ -121,5 +128,50 @@ export class AdminPage extends BaseElement {
             this.collections = this.collections?.filter((other) => other._id != collection._id);
         }
         this.requestUpdate();
+    }
+
+    async export(ev: Event, collection: Collection) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const sources = await Api.getSources(Store.getAdminToken()!, collection._id!);
+        if (!sources.success) {
+            toast(i18n("Could not export collection"));
+            return;
+        }
+        collection = { ...collection };
+        collection._id = undefined;
+        sources.data.forEach((source) => {
+            source._id = undefined;
+            source.collectionId = "";
+        });
+
+        downloadJson(
+            {
+                collection,
+                sources: sources.data,
+            },
+            collection.name
+        );
+    }
+
+    async import(ev: Event) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        uploadJson(async (data: { collection: Collection; sources: Source[] }) => {
+            const colResult = await Api.setCollection(Store.getAdminToken()!, data.collection);
+            if (!colResult.success) {
+                toast(i18n("Could not import collection"));
+                return;
+            }
+            for (const source of data.sources) {
+                source.collectionId = colResult.data._id!;
+                const result = await Api.setSource(Store.getAdminToken()!, source);
+                if (!result.success) {
+                    toast("Could not import source");
+                }
+            }
+            this.collections!.unshift(colResult.data);
+            this.requestUpdate();
+        });
     }
 }

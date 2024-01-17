@@ -68,6 +68,8 @@ export interface Messages {
     "Chatbot icon (128x128)": string;
     "Could not upload icon": string;
     "Chatbot CSS": string;
+    "Could not export collection": string;
+    "Could not import collection": string;
 }
 
 const english: Messages = {
@@ -139,6 +141,8 @@ const english: Messages = {
     "Chatbot icon (128x128)": "Chatbot icon (128x128)",
     "Could not upload icon": "Could not upload icon",
     "Chatbot CSS": "Chatbot CSS",
+    "Could not export collection": "Could not export collection",
+    "Could not import collection": "Could not import collection",
 };
 
 export type LanguageCode = "en";
