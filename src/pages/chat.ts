@@ -189,7 +189,11 @@ export class ChatGptReply extends BaseElement {
     }
 
     render() {
-        const cursor = !this.isComplete ? html`<span class="ml-2 w-3 h-3 inline-block rounded-full bg-[#ccccc] dark:bg-[#f0f0f0]"></span>` : nothing;
+        const cursor = !this.isComplete
+            ? html`<span
+                  class="ml-2 w-3 h-3 inline-block rounded-full bg-black dark:bg-white animate-pulse animate-duration-1000 animate-loop"
+              ></span>`
+            : nothing;
         const markdown = DOMPurify.sanitize(marked.parse(this.text.trim()) as string);
         const debugQuery = this.debug?.query;
         const debugRagHistory = this.debug?.ragHistory;
@@ -300,8 +304,8 @@ export class ChatPage extends BaseElement {
         return html`<style>
                 ${botCss ?? ""}
             </style>
-            <main class="chat w-screen max-h-screen h-screen overflow-auto flex flex-col">
-                <div id="scrollContainer" class="flex-1 w-full flex flex-col items-center overflow-auto">
+            <main class="chat w-full h-full overflow-auto flex flex-col">
+                <div class="flex-1 w-full flex flex-col items-center">
                     <div class="chat-topbar sticky top-0 flex items-center justify-between z-10 h-10 w-full max-w-[640px] p-2">
                         <theme-toggle class="ml-auto"></theme-toggle>
                     </div>
@@ -315,7 +319,7 @@ export class ChatPage extends BaseElement {
                             id="editor"
                             @keydown=${(ev: KeyboardEvent) => this.handleKeyDown(ev)}
                             @input=${(ev: InputEvent) => this.handleInput(ev)}
-                            class="chat-input flex-grow outline-none resize-none leading-tight"
+                            class="chat-input bg-transparent flex-grow outline-none resize-none leading-tight"
                             rows="1"
                         ></textarea>
                         <button ?disabled=${!canSend} @click=${() => this.complete()}>

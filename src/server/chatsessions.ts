@@ -1,16 +1,13 @@
-import OpenAI from "openai";
-import { ChatCompletionChunk, ChatCompletionMessageParam } from "openai/resources/chat/completions";
-import { v4 as uuid } from "uuid";
-import { RagCollection } from "./rag";
-import { getEncoding, encodingForModel } from "js-tiktoken";
-import { ChatMessage, ChatSession, CompletionDebug, VectorDocument } from "../common/api";
-import { encode } from "gpt-tokenizer";
-import { Database, VectorStore } from "./database";
 import { CohereClient } from "cohere-ai";
 import { RerankRequestDocumentsItem } from "cohere-ai/api";
+import { encode } from "gpt-tokenizer";
+import { getEncoding } from "js-tiktoken";
+import OpenAI from "openai";
+import { ChatMessage, ChatSession, CompletionDebug, VectorDocument } from "../common/api";
+import { Database, VectorStore } from "./database";
 
 const tiktokenEncoding = getEncoding("cl100k_base");
-const logFile = "docker/data/log.txt";
+const openaiModel = "gpt-3.5-turbo";
 
 export class ChatSessions {
     readonly openai: OpenAI;
@@ -103,7 +100,7 @@ Berufsbild Programmierer
 "`;
         let start = performance.now();
         const response = await this.openai.chat.completions.create({
-            model: "gpt-3.5-turbo-1106",
+            model: openaiModel,
             messages: [
                 { role: "system", content: systemMessage },
                 { role: "user", content: query + (context.trim().length == 0 ? "" : "\n\n###history" + context.trim()) },
@@ -173,7 +170,7 @@ Berufsbild Programmierer
         let response = "";
         const submittedMessages = [session.rawMessages[0], ...historyMessages];
         submittedMessages.push(session.messages[session.messages.length - 1]);
-        const stream = await this.openai.chat.completions.create({ model: "gpt-3.5-turbo-1106", messages: submittedMessages, stream: true });
+        const stream = await this.openai.chat.completions.create({ model: openaiModel, messages: submittedMessages, stream: true });
 
         // Stream response. If a command is detected, stop calling the chunk callback
         // so frontend never sees commands.
