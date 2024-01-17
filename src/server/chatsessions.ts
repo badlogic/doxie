@@ -101,7 +101,7 @@ Tätigkeiten als Programmierer
 Aufgaben eines Programmierers
 Berufsbild Programmierer
 "`;
-
+        let start = performance.now();
         const response = await this.openai.chat.completions.create({
             model: "gpt-3.5-turbo-1106",
             messages: [
@@ -109,6 +109,7 @@ Berufsbild Programmierer
                 { role: "user", content: query + (context.trim().length == 0 ? "" : "\n\n###history" + context.trim()) },
             ],
         });
+        console.log("Expanding query took: " + ((performance.now() - start) / 1000).toFixed(3) + " secs");
         return response.choices[0].message.content;
     }
 
@@ -146,7 +147,7 @@ Berufsbild Programmierer
             });
             const response = await this.cohere.rerank({
                 model: `rerank-multilingual-v2.0`,
-                topN: 10,
+                topN: 5,
                 query: ragQuery,
                 returnDocuments: false,
                 documents: reranked,

@@ -33,12 +33,17 @@ export class Embedder {
         return result;
     }
 
-    async embedDocuments(docs: EmbedderDocument[], shouldStop: () => Promise<boolean> = async () => false) {
+    async embedDocuments(docs: EmbedderDocument[], shouldStop: () => Promise<boolean> = async () => false, split = true) {
         await this.log(`Splitting ${docs.length} docs into segments`);
         let i = 0;
         let totalTokens = 0;
         for (const doc of docs) {
-            await this.splitIntoSegments(doc);
+            if (split) {
+                await this.splitIntoSegments(doc);
+            } else {
+                const tokenCount = this.tokenize(doc.text).length;
+                doc.segments.push({ text: doc.text, tokenCount, embedding: [] });
+            }
             for (const segment of doc.segments) {
                 totalTokens += segment.tokenCount;
             }

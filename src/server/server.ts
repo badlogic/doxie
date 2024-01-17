@@ -4,6 +4,7 @@ import cors from "cors";
 import express, { Request, Response } from "express";
 import { body, header, param, validationResult } from "express-validator";
 import * as fs from "fs";
+import path from "path";
 import * as http from "http";
 import multer from "multer";
 import WebSocket, { WebSocketServer } from "ws";
@@ -14,8 +15,7 @@ import { Database, VectorStore } from "./database";
 import { Embedder } from "./embedder";
 import { Rag } from "./rag";
 import { Jobs } from "./jobs";
-
-const upload = multer({ storage: multer.memoryStorage() });
+import { v4 as uuid } from "uuid";
 
 const port = process.env.PORT ?? 3333;
 const openaiKey = process.env.DOXIE_OPENAI_KEY;
@@ -51,8 +51,8 @@ function logError(endpoint: string, message: string, e: any) {
 }
 
 (async () => {
-    if (!fs.existsSync("docker/data")) {
-        fs.mkdirSync("docker/data");
+    if (!fs.existsSync("html/files")) {
+        fs.mkdirSync("html/files");
     }
 
     await Promise.all([Rag.waitForChroma(), Database.waitForMongo()]);
@@ -63,18 +63,35 @@ function logError(endpoint: string, message: string, e: any) {
     const sessions = new ChatSessions(openaiKey, database, vectors, cohereKey);
     const jobs = new Jobs(database);
 
-    // const berufsLexikonFile = "docker/data/berufslexikon.embeddings.bin";
-    // const spineFile = "docker/data/spine.embeddings.bin";
-    // const berufsLexikon = await rag.loadCollection("berufslexikon", berufsLexikonFile);
-    // const spine = await rag.loadCollection("spine", spineFile);
-    // const sessions = new ChatSessions(openaiKey, [berufsLexikon, spine]);
-
     const app = express();
     app.set("json spaces", 2);
     app.use(cors());
     app.use(compression());
     app.use(express.json());
     app.set("trust proxy", true);
+
+    const storage = multer.diskStorage({
+        destination: "html/files", // Set destination to html/files
+        filename: (req, file, cb) => {
+            const fileExtension = path.extname(file.originalname);
+            cb(null, uuid() + fileExtension); // Set filename to UUID
+        },
+    });
+    const upload = multer({ storage: storage });
+
+    app.post("/api/upload", [upload.single("file"), header("authorization").notEmpty().isString()], async (req: Request, res: Response) => {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
+        try {
+            const token = req.headers.authorization!;
+            if (token != adminToken) throw new Error("Inavlid admin token");
+            if (!req.file) throw new Error("No file uploaded");
+            apiSuccess(res, req.file.filename);
+        } catch (e) {
+            logError(req.path, "Could not upload file", e);
+            apiError(res, "Could not upload file");
+        }
+    });
 
     app.get("/api/collections", [header("authorization").notEmpty().isString()], async (req: Request, res: Response) => {
         const errors = validationResult(req);
@@ -107,8 +124,14 @@ function logError(endpoint: string, message: string, e: any) {
             if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
             try {
                 const token = req.headers.authorization!;
-                if (token != adminToken) throw new Error("Inavlid admin token");
                 const id = req.params.id as string;
+                if (token == "noauth") {
+                    const collection = await database.getCollection(id);
+                    collection.systemPrompt = "";
+                    apiSuccess<Collection>(res, collection);
+                    return;
+                }
+                if (token != adminToken) throw new Error("Inavlid admin token");
                 apiSuccess<Collection>(res, await database.getCollection(id));
             } catch (e) {
                 const error = "Could not get collection " + req.query.id;
@@ -424,6 +447,7 @@ function setupLiveReload(server: http.Server) {
     });
 
     chokidar.watch("html/", { ignored: /(^|[\/\\])\../, ignoreInitial: true }).on("all", (event, path) => {
+        if (path.startsWith("html/files/")) return;
         clients.forEach((client) => {
             if (client.readyState === WebSocket.OPEN) {
                 client.send(`File changed: ${path}`);

@@ -44,6 +44,11 @@ export interface Collection {
     name: string;
     description: string;
     systemPrompt: string;
+    botName: string;
+    botIcon?: string;
+    botWelcome?: string;
+    botFooter?: string;
+    botCss?: string;
 }
 
 export interface ProcessingJob {

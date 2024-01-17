@@ -62,6 +62,12 @@ export interface Messages {
     Export: string;
     Import: "Import";
     "User questions": string;
+    "Chatbot name": string;
+    "Chatbot footer (HTML)": string;
+    "Chatbot welcome message": string;
+    "Chatbot icon (128x128)": string;
+    "Could not upload icon": string;
+    "Chatbot CSS": string;
 }
 
 const english: Messages = {
@@ -127,6 +133,12 @@ const english: Messages = {
     Export: "Export",
     Import: "Import",
     "User questions": "User questions",
+    "Chatbot name": "Chatbot name",
+    "Chatbot footer (HTML)": "Chatbot footer (HTML)",
+    "Chatbot welcome message": "Chatbot welcome message",
+    "Chatbot icon (128x128)": "Chatbot icon (128x128)",
+    "Could not upload icon": "Could not upload icon",
+    "Chatbot CSS": "Chatbot CSS",
 };
 
 export type LanguageCode = "en";

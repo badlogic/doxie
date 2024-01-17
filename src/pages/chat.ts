@@ -4,12 +4,79 @@ import { unsafeHTML } from "lit-html/directives/unsafe-html.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { Marked } from "marked";
 import { BaseElement, dom, getScrollParent, renderError } from "../app";
-import { Api, CompletionDebug } from "../common/api";
+import { Api, Collection, CompletionDebug } from "../common/api";
 import { sendIcon } from "../utils/icons";
 import { router } from "../utils/routing";
 import { markedHighlight } from "marked-highlight";
 import hljs from "highlight.js";
 import { map } from "lit/directives/map.js";
+
+export const chatDefaultCss = `
+:root {
+    --background: #fff;
+	--muted-fg: #6b7280;
+	color: #111;
+}
+
+/* Dark colors */
+.dark {
+    --background: #111;
+	--muted-fg: #9ca3af;
+	color: rgb(221, 221, 221);
+}
+
+.chat {
+}
+
+.chat a {
+	color: rgb(59, 130, 246);
+}
+
+.chat-topbar {
+    background-color: var(--background);
+}
+
+.chat-message-user {
+}
+
+.chat-message-bot {
+}
+
+.chat-icon-img, .chat-icon-noimg {
+    width: 2em;
+    height: 2em;
+    border-radius: 9999px;
+}
+
+.chat-message-bot .chat-icon-noimg {
+    background-color: #ab68ff;
+}
+
+.chat-message-user .chat-icon-noimg {
+    background-color: #512da8;
+}
+
+.chat-message-name {
+	font-weight: 600;
+}
+
+.chat-message-text {
+}
+
+.chat-bottombar {
+    background-color: var(--background);
+}
+
+.chat-input {
+    background: none;
+}
+
+.chat-footer {
+	font-size: 0.75rem;
+	line-height: 1rem;
+	color: var(--muted-fg);
+}
+`;
 
 export interface Message {
     role: "doxie" | "user" | "error";
@@ -29,6 +96,12 @@ const marked = new Marked(
 @customElement("chat-message")
 export class ChatMessage extends BaseElement {
     @property()
+    botName = "Doxie";
+
+    @property()
+    botIcon?: string;
+
+    @property()
     message?: Message;
 
     render() {
@@ -36,21 +109,23 @@ export class ChatMessage extends BaseElement {
             return html`<div>${renderError(this.message.text)}</div>`;
         }
 
-        const color = this.message?.role == "doxie" ? "#ab68ff" : "#512da8";
         const role = this.message?.role;
         const text = this.message?.text ?? "";
         const markdown = DOMPurify.sanitize(marked.parse(text) as string);
+        const name = this.message?.role == "doxie" ? this.botName : "You";
+        const botIcon = this.message?.role == "doxie" ? this.botIcon : undefined;
 
-        return html`<div class="flex w-full px-4 gap-4">
-            <div
-                class="w-6 h-6 rounded-full dark:border dark:border-muted-fg flex items-center justify-center text-white text-sm"
-                style="background-color: ${color};"
-            >
-                <span>${role?.substring(0, 1).toUpperCase()}</span>
-            </div>
+        return html`<div class="${this.message?.role == "doxie" ? "chat-message-bot" : "chat-message-user"} flex w-full px-4 gap-4">
+            ${botIcon
+                ? html`<img class="chat-icon-img" src="/files/${botIcon}" />`
+                : html`<div class="chat-icon-noimg flex-shrink-0 flex items-center justify-center">
+                      <span>${this.botName.charAt(0).toUpperCase()}</span>
+                  </div>`}
             <div class="w-full flex flex-col">
-                <div class="font-semibold">${this.message?.role}</div>
-                ${role == "doxie" ? html`<text-typer .text=${markdown}></text-typer>` : html`<div>${unsafeHTML(markdown)}</div>`}
+                <div class="chat-message-name">${name}</div>
+                ${role == "doxie"
+                    ? html`<text-typer class="chat-message-text" .text=${markdown}></text-typer>`
+                    : html`<div>${unsafeHTML(markdown)}</div>`}
             </div>
         </div>`;
     }
@@ -63,6 +138,12 @@ export class ChatGptReply extends BaseElement {
 
     @property()
     sessionId?: string;
+
+    @property()
+    botName = "Doxie";
+
+    @property()
+    botIcon?: string;
 
     @property()
     completeCb = () => {};
@@ -108,7 +189,6 @@ export class ChatGptReply extends BaseElement {
     }
 
     render() {
-        const color = "#ab68ff";
         const cursor = !this.isComplete ? html`<span class="ml-2 w-3 h-3 inline-block rounded-full bg-[#ccccc] dark:bg-[#f0f0f0]"></span>` : nothing;
         const markdown = DOMPurify.sanitize(marked.parse(this.text.trim()) as string);
         const debugQuery = this.debug?.query;
@@ -119,16 +199,15 @@ export class ChatGptReply extends BaseElement {
         const debugTokens = (this.debug?.tokensIn ?? 0) + (this.debug?.tokensOut ?? 0);
 
         // prettier-ignore
-        return html`<div class="flex w-full max-w-full px-4 gap-4">
-            <div
-                class="flex-shrink-0 w-6 h-6 rounded-full dark:border dark:border-muted-fg flex items-center justify-center text-white text-sm"
-                style="background-color: ${color};"
+        return html`<div class="chat-message-bot flex w-full max-w-full px-4 gap-4">
+            ${this.botIcon ? html`<img class="chat-icon-img" src="/files/${this.botIcon}">`: html`<div
+                class="chat-icon-noimg flex-shrink-0 flex items-center justify-center"
             >
-                <span>D</span>
-            </div>
+                <span>${this.botName.charAt(0).toUpperCase()}</span>
+            </div>`}
             <div class="overflow-auto flex-1 flex flex-col">
-                <div class="font-semibold">Doxie</div>
-                <div class="gpt-reply w-full">${unsafeHTML(markdown)}${cursor}</div>
+                <div class="chat-message-name">${this.botName}</div>
+                <div class="chat-message-text">${unsafeHTML(markdown)}${cursor}</div>
                 ${this.error
                     ? html`<div class="bg-red-500 w-full flex items-center px-4 py-2 text-[#fff] gap-2 rounded-md">${this.error}</div>`
                     : nothing}
@@ -178,6 +257,7 @@ export class ChatPage extends BaseElement {
     text = "";
 
     sessionId?: string;
+    collection?: Collection;
 
     constructor() {
         super();
@@ -185,13 +265,19 @@ export class ChatPage extends BaseElement {
 
     async connect() {
         try {
-            const collection = router.getCurrentParams()?.get("collection") ?? "berufslexikon";
-            const sessionId = await Api.createSession(collection);
+            const collectionId = router.getCurrentParams()?.get("collection") ?? "";
+            const collection = await Api.getCollection("noauth", collectionId);
+            if (!collection.success) {
+                this.addMessage({ role: "error", text: "Could not create chat session. Try again later" });
+                return;
+            }
+            this.collection = collection.data;
+            const sessionId = await Api.createSession(collectionId);
             if (!sessionId.success) {
                 this.addMessage({ role: "error", text: "Could not create chat session. Try again later" });
                 return;
             }
-            this.addMessage({ role: "doxie", text: "How can I assist you today?" });
+            this.addMessage({ role: "doxie", text: this.collection.botWelcome ?? "How can I assist you today?" });
             this.sessionId = sessionId.data.sessionId;
         } finally {
             this.isConnecting = false;
@@ -205,43 +291,54 @@ export class ChatPage extends BaseElement {
 
     render() {
         const canSend = this.text.trim().length > 0 && !this.isWaitingForResponse;
+        const footer = this.isConnecting
+            ? ""
+            : this.collection?.botFooter ??
+              `<a href="/privacy">Privacy & Imprint</a><span>|</span><span>By <a href="https://twitter.com/badlogicgames">Mario Zechner</a>`;
+        const botCss = this.collection?.botCss;
 
-        return html`<main class="w-screen max-h-screen h-screen overflow-auto flex flex-col">
-            <div id="scrollContainer" class="flex-1 w-full flex flex-col items-center overflow-auto">
-                <div class="sticky top-0 flex items-center justify-between z-10 h-14 w-full max-w-[640px] p-2 font-semibold bg-background">
-                    <a href="/" class="text-lg pl-2">Doxie</a>
-                    <theme-toggle class="ml-auto"></theme-toggle>
+        return html`<style>
+                ${botCss ?? ""}
+            </style>
+            <main class="chat w-screen max-h-screen h-screen overflow-auto flex flex-col">
+                <div id="scrollContainer" class="flex-1 w-full flex flex-col items-center overflow-auto">
+                    <div class="chat-topbar sticky top-0 flex items-center justify-between z-10 h-10 w-full max-w-[640px] p-2">
+                        <theme-toggle class="ml-auto"></theme-toggle>
+                    </div>
+                    ${this.isConnecting ? html`<div>Connecting</div>` : nothing}
+                    <div id="messages" class="w-full flex flex-col items-center"></div>
+                    <div id="sentinel" class="min-h-4"></div>
                 </div>
-                ${this.isConnecting ? html`<div>Connecting</div>` : nothing}
-                <div id="messages" class="w-full flex flex-col items-center">
+                <div class="chat-bottombar w-full flex flex-col pb-2 px-4 justify-center items-center">
+                    <div class="flex items-center border border-divider rounded-[16px] py-2 px-4 mx-4 w-full max-w-[640px]">
+                        <textarea
+                            id="editor"
+                            @keydown=${(ev: KeyboardEvent) => this.handleKeyDown(ev)}
+                            @input=${(ev: InputEvent) => this.handleInput(ev)}
+                            class="chat-input flex-grow outline-none resize-none leading-tight"
+                            rows="1"
+                        ></textarea>
+                        <button ?disabled=${!canSend} @click=${() => this.complete()}>
+                            <i class="icon w-6 h-6 ${!canSend ? "text-muted-fg" : ""}">${sendIcon}</i>
+                        </button>
+                    </div>
+                    <div class="chat-footer flex items-center justify-center gap-4 mt-2">${unsafeHTML(footer)}</div>
                 </div>
-                <div id="sentinel" class="min-h-4"></div>
-            </div>
-            <div class="bg-background w-full flex flex-col pb-2 px-4 justify-center items-center">
-                <div class="flex items-center border border-divider rounded-[16px] py-2 px-4 mx-4 w-full max-w-[640px]">
-                    <textarea
-                        id="editor"
-                        @keydown=${(ev: KeyboardEvent) => this.handleKeyDown(ev)}
-                        @input=${(ev: InputEvent) => this.handleInput(ev)}
-                        class="flex-grow bg-transparent outline-none resize-none leading-tight"
-                        rows="1"
-                    ></textarea>
-                    <button ?disabled=${!canSend} @click=${() => this.complete()}><i class="icon w-6 h-6 ${
-            !canSend ? "text-muted-fg" : ""
-        }">${sendIcon}</i></button>
-                </div>
-                <div class="flex text-xs items-center justify-center gap-4 mt-2 text-muted-fg">
-                    <a href="/privacy">Privacy & Imprint</a>
-                    <span>|</span>
-                    <span>By <a href="https://twitter.com/badlogicgames">Mario Zechner</a>
-                </div>
-            </div>
-        </main>`;
+            </main>`;
     }
 
     addMessage(message: Message) {
         const messagesDiv = this.querySelector<HTMLDivElement>("#messages")!;
-        messagesDiv.append(dom(html`<chat-message class="w-full max-w-[640px] mt-4" .message=${message}></chat-message>`)[0]);
+        messagesDiv.append(
+            dom(
+                html`<chat-message
+                    class="w-full max-w-[640px] mt-4"
+                    .botName=${this.collection?.botName ?? "Doxie"}
+                    .botIcon=${this.collection?.botIcon}
+                    .message=${message}
+                ></chat-message>`
+            )[0]
+        );
     }
 
     handleKeyDown(ev: KeyboardEvent) {
@@ -298,6 +395,8 @@ export class ChatPage extends BaseElement {
                 html`<chat-gpt-reply
                     class="w-full max-w-[640px] mt-4"
                     .sessionId=${this.sessionId}
+                    .botName=${this.collection?.botName ?? "Doxie"}
+                    .botIcon=${this.collection?.botIcon}
                     .query=${this.text}
                     .completeCb=${() => {
                         this.isWaitingForResponse = false;

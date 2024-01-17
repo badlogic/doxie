@@ -1,9 +1,9 @@
 import { TemplateResult, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { map } from "lit/directives/map.js";
-import { BaseElement, closeButton, dom, renderError, renderTopbar, toast } from "../app.js";
+import { BaseElement, chatDefaultCss, closeButton, dom, renderError, renderTopbar, toast } from "../app.js";
 import { appState } from "../appstate.js";
-import { Api, ChatSession, Collection, ProcessingJob, Source, VectorDocument } from "../common/api.js";
+import { Api, ChatSession, Collection, ProcessingJob, Source, VectorDocument, apiPost } from "../common/api.js";
 import { i18n } from "../utils/i18n.js";
 import { addIcon, deleteIcon, downloadIcon } from "../utils/icons.js";
 import { router } from "../utils/routing.js";
@@ -57,7 +57,7 @@ export class CollectionPage extends BaseElement {
     error?: string;
 
     @state()
-    collection: Collection = { name: "", description: "", systemPrompt: "You are a helpful assistant" };
+    collection: Collection = { name: "", description: "", systemPrompt: "You are a helpful assistant", botName: "Doxie" };
 
     @state()
     sources: Source[] = [];
@@ -194,6 +194,56 @@ export class CollectionPage extends BaseElement {
                     rows="5"
                     @input=${() => this.handleInput()}
                 ></textarea>
+                <span class="self-start text-xs text-muted-fg font-semibold -mb-6 ml-2 bg-background z-[5] px-1">${i18n("Chatbot name")}</span>
+                <input
+                    id="botName"
+                    class="textfield pt-2 ${collection.name.length == 0 ? "border-red-500" : ""}"
+                    .value=${collection.botName ?? "Doxie"}
+                    @input=${() => this.handleInput()}
+                />
+                <span class="self-start text-xs text-muted-fg font-semibold bg-background z-[5] px-1">${i18n("Chatbot icon (128x128)")}</span>
+                ${this.collection.botIcon
+                    ? html` <img
+                          class="h-12 w-12 border border-divider rounded-full cursor-pointer"
+                          src="/files/${this.collection.botIcon}"
+                          @click=${() => this.uploadImage()}
+                      />`
+                    : html`<div
+                          class="cursor-pointer flex-shrink-0 w-12 h-12 rounded-full dark:border dark:border-muted-fg flex items-center justify-center text-white text-lg"
+                          style="background-color: #ab68ff;"
+                          @click=${() => this.uploadImage()}
+                      >
+                          <span>${(this.collection.botName ?? "Doxie").charAt(0).toUpperCase()}</span>
+                      </div>`}
+                <span class="self-start text-xs text-muted-fg font-semibold -mb-6 ml-2 bg-background z-[5] px-1"
+                    >${i18n("Chatbot welcome message")}</span
+                >
+                <textarea
+                    id="botWelcome"
+                    class="textfield py-3"
+                    .value=${collection.botWelcome ?? "How can I assist you today?"}
+                    rows="3"
+                    @input=${() => this.handleInput()}
+                ></textarea>
+                <span class="self-start text-xs text-muted-fg font-semibold -mb-6 ml-2 bg-background z-[5] px-1"
+                    >${i18n("Chatbot footer (HTML)")}</span
+                >
+                <textarea
+                    id="botFooter"
+                    class="textfield py-3"
+                    .value=${collection.botFooter ?? ""}
+                    rows="3"
+                    @input=${() => this.handleInput()}
+                ></textarea>
+                <span class="self-start text-xs text-muted-fg font-semibold -mb-6 ml-2 bg-background z-[5] px-1">${i18n("Chatbot CSS")}</span>
+                <textarea
+                    id="botCss"
+                    class="textfield py-3"
+                    .value=${collection.botCss ?? chatDefaultCss.trim()}
+                    rows="10"
+                    @keydown=${(ev: KeyboardEvent) => this.handleTab(ev)}
+                    @input=${() => this.handleInput()}
+                ></textarea>
                 ${!this.isNew
                     ? html` <div class="flex items-center mt-4 items-center gap-2">
                               <h2>${i18n("Sources")}</h2>
@@ -224,7 +274,7 @@ export class CollectionPage extends BaseElement {
                                   >
                                       <a href="/sources/${encodeURIComponent(source._id ?? "")}">
                                           <div class="flex p-4 pb-0 gap-2">
-                                              <span class="rounded-md px-1 bg-green-600 font-semibold">${source.type}</span>
+                                              <span class="rounded-md px-1 border border-green-600 font-semibold">${source.type}</span>
                                               <span class="font-semibold">${source.name}</span>
                                               <button
                                                   class="ml-auto hover:text-primary flex items-center gap-1"
@@ -256,17 +306,73 @@ export class CollectionPage extends BaseElement {
         </div>`;
     }
 
+    handleTab(ev: KeyboardEvent) {
+        if (ev.key == "Tab") {
+            ev.preventDefault();
+            const el = this.querySelector<HTMLTextAreaElement>("#botCss")!;
+            const start = el.selectionStart;
+            const end = el.selectionEnd;
+
+            el.value = el.value.substring(0, start) + "\t" + el.value.substring(end);
+            el.selectionStart = el.selectionEnd = start + 1;
+        }
+    }
+
     handleInput() {
         const name = this.querySelector<HTMLInputElement>("#name")!.value.trim();
         const description = this.querySelector<HTMLTextAreaElement>("#description")!.value.trim();
         const systemPrompt = this.querySelector<HTMLTextAreaElement>("#systemPrompt")!.value.trim();
+        const botName = this.querySelector<HTMLInputElement>("#botName")!.value.trim();
+        const botWelcome = this.querySelector<HTMLInputElement>("#botWelcome")!.value.trim();
+        const botFooter = this.querySelector<HTMLTextAreaElement>("#botFooter")!.value.trim();
+        const botCss = this.querySelector<HTMLTextAreaElement>("#botCss")!.value.trim();
 
         const collection = this.collection;
         collection.name = name;
         collection.description = description;
         collection.systemPrompt = systemPrompt;
+        collection.botName = botName;
+        collection.botWelcome = botWelcome;
+        collection.botFooter = botFooter;
+        collection.botCss = botCss;
         this.collection = { ...collection };
         this.requestUpdate();
+    }
+
+    uploadImage() {
+        // Create a file input element
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = "image/*"; // Limit to image files
+
+        input.onchange = async (e: Event) => {
+            const target = e.target as HTMLInputElement;
+            const file = target?.files ? target.files[0] : undefined;
+            if (!file) {
+                this.error = i18n("Could not upload icon");
+                return;
+            }
+
+            // Create FormData and append the file
+            const formData = new FormData();
+            formData.append("file", file);
+
+            // Call apiPost to upload the file
+            try {
+                const response = await apiPost<string>("upload", formData, Store.getAdminToken()!);
+                if (response.success) {
+                    this.collection.botIcon = response.data;
+                    this.requestUpdate();
+                } else {
+                    this.error = i18n("Could not upload icon");
+                }
+            } catch (error) {
+                console.error("Error during upload:", error);
+            }
+        };
+
+        // Trigger the file browser
+        input.click();
     }
 
     canSave(collection?: Collection) {

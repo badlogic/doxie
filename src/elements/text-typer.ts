@@ -9,7 +9,7 @@ export class TextTyper extends BaseElement {
     text = "";
 
     @property()
-    charactersPerSecond = 50;
+    charactersPerSecond = 250;
 
     @state()
     typedText = "";
@@ -32,6 +32,6 @@ export class TextTyper extends BaseElement {
     render() {
         const complete = this.typedText == this.text || this.stopped;
         // prettier-ignore
-        return html` <div class="whitespace-pre-wrap break-words">${unsafeHTML(this.typedText)}${!complete ? html`<span class="ml-2 w-3 h-3 inline-block rounded-full bg-[#ccccc] dark:bg-[#f0f0f0]"></span>` : nothing}</div>`;
+        return html` <div class="whitespace-pre-wrap break-words">${unsafeHTML(this.typedText.trim())}${!complete ? html`<span class="ml-2 w-3 h-3 inline-block rounded-full bg-[#ccccc] dark:bg-[#f0f0f0]"></span>` : nothing}</div>`;
     }
 }

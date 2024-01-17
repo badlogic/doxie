@@ -105,7 +105,7 @@ class FaqProccessor extends BaseProcessor<FaqSource> {
             });
         }
         const embedder = new Embedder(this.processor.openaiKey, this.log);
-        await embedder.embedDocuments(documents, this.shouldStop);
+        await embedder.embedDocuments(documents, this.shouldStop, false);
         return documents;
     }
 }

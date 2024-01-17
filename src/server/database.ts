@@ -228,9 +228,11 @@ export class VectorStore {
     }
 
     async query(collectionId: string, sourceId: string | undefined, query: string, k: number = 10) {
-        const start = performance.now();
+        let start = performance.now();
         const queryVector = (await this.embedder.embed([query]))[0];
         console.log("Embedding query took: " + ((performance.now() - start) / 1000).toFixed(3) + " secs");
+
+        start = performance.now();
         const collection = await this.chroma.getCollection({ name: collectionId });
         const queryConfig: any = {
             queryEmbeddings: [queryVector],
