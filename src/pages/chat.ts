@@ -450,7 +450,7 @@ export class ChatPage extends BaseElement {
         if (!this.replayMessages) return;
         if (this.replayIndex == this.replayMessages?.length) return;
         const message = this.replayMessages[this.replayIndex++];
-        this.text = message.content + (this.replayIndex == 1 ? "###debug" : "");
+        this.text = message.content + (this.replayIndex == 1 ? " ###debug" : "");
         this.querySelector<HTMLTextAreaElement>("#editor")!.value = this.text;
         this.complete();
     }
