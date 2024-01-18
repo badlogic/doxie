@@ -300,7 +300,7 @@ export class ChatPage extends BaseElement {
                 return;
             }
             this.collection = collection.data;
-            const sourceId = replaySession ? replaySession.sourceId : router.getCurrentParams()?.get("session");
+            const sourceId = replaySession ? replaySession.sourceId : router.getCurrentParams()?.get("source");
             const sessionId = await Api.createSession(collectionId, sourceId);
             if (!sessionId.success) {
                 this.addMessage({ role: "error", text: "Could not create chat session. Try again later" });
@@ -393,6 +393,7 @@ export class ChatPage extends BaseElement {
 
     complete() {
         if (this.isWaitingForResponse) return;
+        if (this.text.trim() == "") return;
         const editor = this.querySelector<HTMLTextAreaElement>("#editor")!;
         editor.value = "";
         editor.style.height = "auto";
