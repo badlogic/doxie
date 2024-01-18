@@ -4,12 +4,13 @@ import { unsafeHTML } from "lit-html/directives/unsafe-html.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { Marked } from "marked";
 import { BaseElement, dom, getScrollParent, renderError } from "../app";
-import { Api, Collection, CompletionDebug } from "../common/api";
+import { Api, ChatSession, Collection, CompletionDebug, ChatMessage } from "../common/api";
 import { sendIcon } from "../utils/icons";
 import { router } from "../utils/routing";
 import { markedHighlight } from "marked-highlight";
 import hljs from "highlight.js";
 import { map } from "lit/directives/map.js";
+import { Store } from "../utils/store";
 
 export const chatDefaultCss = `
 :root {
@@ -94,7 +95,7 @@ const marked = new Marked(
 );
 
 @customElement("chat-message")
-export class ChatMessage extends BaseElement {
+export class ChatMessageElement extends BaseElement {
     @property()
     botName = "Doxie";
 
@@ -201,6 +202,14 @@ export class ChatGptReply extends BaseElement {
         const debugMessages = this.debug?.submittedMessages;
         const debugResponse = this.debug?.response;
         const debugTokens = (this.debug?.tokensIn ?? 0) + (this.debug?.tokensOut ?? 0);
+        const debugHighlight = (content: string) => {
+            const result = content
+                .replaceAll(/###context-(\d+)/g, '<b class="text-blue-400">###context-$1</b>')
+                .replaceAll(/###question/g, '<b class="text-blue-400">###question</b>')
+                .replaceAll(/###summary/g, '<b class="text-blue-400">###summary</b>')
+                .replaceAll(/###topicdrift/g, '<b class="text-blue-400">###topicdrift</b>');
+            return result;
+        };
 
         // prettier-ignore
         return html`<div class="chat-message-bot flex w-full max-w-full px-4 gap-4">
@@ -233,7 +242,7 @@ export class ChatGptReply extends BaseElement {
                 ${debugMessages && debugResponse? html`
                     <div class="debug hljs p-4 w-full flex flex-col mt-2">
                         <span class="text-sm font-semibold">Request/Response</span>
-                        <pre class="whitespace-pre-wrap"><code>${map(debugMessages, (msg) => html`<b class="text-green-400">${msg.role}</b>\n${msg.content}\n`)}\n\n<b class="text-green-400">response</b>\n${debugResponse}</code></pre>
+                        <pre class="whitespace-pre-wrap"><code>${map(debugMessages, (msg) => html`<b class="text-green-400">${msg.role}</b>\n${unsafeHTML(debugHighlight(msg.content))}\n`)}\n\n<b class="text-green-400">response</b>\n${unsafeHTML(debugHighlight(debugResponse))}</code></pre>
                     </div>`: nothing}
                     ${debugTokens > 0 ? html`
                     <div class="debug hljs p-4 w-full flex flex-col mt-2">
@@ -262,27 +271,49 @@ export class ChatPage extends BaseElement {
 
     sessionId?: string;
     collection?: Collection;
+    isReplay = false;
+    replayMessages?: ChatMessage[];
+    replayIndex = 0;
 
     constructor() {
         super();
+        this.isReplay = location.pathname.startsWith("/replay/");
     }
 
     async connect() {
         try {
-            const collectionId = router.getCurrentParams()?.get("collection") ?? "";
+            let replaySession: ChatSession | undefined;
+            if (this.isReplay) {
+                const sessionId = router.getCurrentParams()?.get("chatsession");
+                const session = await Api.getChat(Store.getAdminToken()!, sessionId!);
+                if (!session.success) {
+                    this.addMessage({ role: "error", text: "Could not create chat session. Try again later" });
+                    return;
+                }
+                replaySession = session.data;
+                this.replayMessages = replaySession.rawMessages.filter((message) => message.role == "user");
+            }
+            const collectionId = replaySession ? replaySession.collectionId : router.getCurrentParams()?.get("collection") ?? "";
             const collection = await Api.getCollection("noauth", collectionId);
             if (!collection.success) {
                 this.addMessage({ role: "error", text: "Could not create chat session. Try again later" });
                 return;
             }
             this.collection = collection.data;
-            const sessionId = await Api.createSession(collectionId);
+            const sourceId = replaySession ? replaySession.sourceId : router.getCurrentParams()?.get("session");
+            const sessionId = await Api.createSession(collectionId, sourceId);
             if (!sessionId.success) {
                 this.addMessage({ role: "error", text: "Could not create chat session. Try again later" });
                 return;
             }
             this.addMessage({ role: "doxie", text: this.collection.botWelcome ?? "How can I assist you today?" });
             this.sessionId = sessionId.data.sessionId;
+            if (this.isReplay) {
+                this.nextReplay();
+                window.addEventListener("beforeunload", async () => {
+                    await Api.deleteSession(Store.getAdminToken()!, this.sessionId);
+                });
+            }
         } finally {
             this.isConnecting = false;
         }
@@ -393,7 +424,7 @@ export class ChatPage extends BaseElement {
             }
             requestAnimationFrame(scrollToBottom);
         };
-        scrollToBottom();
+        if (!this.isReplay) scrollToBottom();
         messagesDiv.append(
             dom(
                 html`<chat-gpt-reply
@@ -405,11 +436,22 @@ export class ChatPage extends BaseElement {
                     .completeCb=${() => {
                         this.isWaitingForResponse = false;
                         scrollParent.removeEventListener("scroll", scrolledUp);
+                        if (this.isReplay) this.nextReplay();
                     }}
                 ></chat-gpt-reply>`
             )[0]
         );
 
         this.text = "";
+    }
+
+    nextReplay() {
+        if (!this.isReplay) return;
+        if (!this.replayMessages) return;
+        if (this.replayIndex == this.replayMessages?.length) return;
+        const message = this.replayMessages[this.replayIndex++];
+        this.text = message.content + (this.replayIndex == 1 ? "###debug" : "");
+        this.querySelector<HTMLTextAreaElement>("#editor")!.value = this.text;
+        this.complete();
     }
 }

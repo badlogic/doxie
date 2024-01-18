@@ -79,7 +79,7 @@ export class AdminPage extends BaseElement {
             </div>`;
         }
 
-        return html`<div class="${pageContainerStyle}">
+        return html` <div class="${pageContainerStyle}">
             ${renderTopbar("Admin", closeButton())}
             <div class="${pageContentStyle} px-4 gap-4">
                 <div class="flex gap-2">
@@ -95,19 +95,28 @@ export class AdminPage extends BaseElement {
                 <div class="flex flex-col gap-4 mb-4">
                     ${map(
                         this.collections,
-                        (collection) => html`<a href="/collections/${encodeURIComponent(
-                            collection._id ?? ""
-                        )}" class="px-4 py-2 flex flex-col gap-2 border border-divider rounded-md underline-none hover:border-primary">
-                            <div class="flex gap-2">
-                                <span class="font-semibold">${collection.name}</span>
-                                <button class="ml-auto hover:text-primary flex items-center gap-1" @click=${(ev: Event) =>
-                                    this.export(ev, collection)}>
-                                    <i class="icon w-5 h-5">${downloadIcon}</i><span>${i18n("Export")}</span>
-                                </button>
-                                <button class="hover:text-primary w-6 h-6 flex items-center justify-center" @click=${(ev: Event) =>
-                                    this.deleteCollection(ev, collection)}><i class="icon w-5 h-5">${deleteIcon}</i></button>
-                            </div>
-                            ${collection.description.length > 0 ? html`<div class="line-clamp-2">${collection.description}</div>` : nothing}
+                        (collection) => html`<div
+                            class="px-4 py-2 flex flex-col gap-2 border border-divider rounded-md underline-none hover:border-primary"
+                        >
+                            <a href="/collections/${encodeURIComponent(collection._id ?? "")}" class="flex flex-col gap-2">
+                                <div class="flex gap-2">
+                                    <span class="font-semibold">${collection.name}</span>
+                                    <button
+                                        class="ml-auto hover:text-primary flex items-center gap-1"
+                                        @click=${(ev: Event) => this.export(ev, collection)}
+                                    >
+                                        <i class="icon w-5 h-5">${downloadIcon}</i><span>${i18n("Export")}</span>
+                                    </button>
+                                    <button
+                                        class="hover:text-primary w-6 h-6 flex items-center justify-center"
+                                        @click=${(ev: Event) => this.deleteCollection(ev, collection)}
+                                    >
+                                        <i class="icon w-5 h-5">${deleteIcon}</i>
+                                    </button>
+                                </div>
+                                ${collection.description.length > 0 ? html`<div class="line-clamp-2">${collection.description}</div>` : nothing}
+                            </a>
+                            <a href="/chat/${collection._id!}" class="button self-start">${i18n("Chat")}</a>
                         </div>`
                     )}
                 </div>

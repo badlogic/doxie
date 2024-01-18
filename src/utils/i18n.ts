@@ -74,6 +74,7 @@ export interface Messages {
     "Click or drag and drop .zip file containing .md files": string;
     "Could not upload .zip": string;
     markdownZipFormat: string;
+    Replay: string;
 }
 
 const english: Messages = {
@@ -155,6 +156,7 @@ const english: Messages = {
 [title]
 [[description]]
 ... actual content ...<code></code></pre>`,
+    Replay: "Replay",
 };
 
 export type LanguageCode = "en";

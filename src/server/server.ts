@@ -84,7 +84,7 @@ function logError(endpoint: string, message: string, e: any) {
         if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
         try {
             const token = req.headers.authorization!;
-            if (token != adminToken) throw new Error("Inavlid admin token");
+            if (token != adminToken) throw new Error("Invalid admin token");
             if (!req.file) throw new Error("No file uploaded");
             apiSuccess(res, req.file.filename);
         } catch (e) {
@@ -108,7 +108,7 @@ function logError(endpoint: string, message: string, e: any) {
                 return;
             }
 
-            if (token != adminToken) throw new Error("Inavlid admin token");
+            if (token != adminToken) throw new Error("Invalid admin token");
             apiSuccess<Collection[]>(res, await database.getCollections());
         } catch (e) {
             logError(req.path, "Could not get collections", e);
@@ -131,7 +131,7 @@ function logError(endpoint: string, message: string, e: any) {
                     apiSuccess<Collection>(res, collection);
                     return;
                 }
-                if (token != adminToken) throw new Error("Inavlid admin token");
+                if (token != adminToken) throw new Error("Invalid admin token");
                 apiSuccess<Collection>(res, await database.getCollection(id));
             } catch (e) {
                 const error = "Could not get collection " + req.query.id;
@@ -149,7 +149,7 @@ function logError(endpoint: string, message: string, e: any) {
             if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
             try {
                 const token = req.headers.authorization!;
-                if (token != adminToken) throw new Error("Inavlid admin token");
+                if (token != adminToken) throw new Error("Invalid admin token");
                 const id = req.params.id as string;
                 await database.deleteCollection(id);
                 apiSuccess(res);
@@ -166,7 +166,7 @@ function logError(endpoint: string, message: string, e: any) {
         if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
         try {
             const token = req.headers.authorization!;
-            if (token != adminToken) throw new Error("Inavlid admin token");
+            if (token != adminToken) throw new Error("Invalid admin token");
             const collection = req.body as Collection;
             apiSuccess<Collection>(res, await database.setCollection(collection));
         } catch (e) {
@@ -184,7 +184,7 @@ function logError(endpoint: string, message: string, e: any) {
             if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
             try {
                 const token = req.headers.authorization!;
-                if (token != adminToken) throw new Error("Inavlid admin token");
+                if (token != adminToken) throw new Error("Invalid admin token");
                 apiSuccess<Source[]>(res, await database.getSources(req.params.id));
             } catch (e) {
                 const error = "Could not get sources of collection " + req.params.id;
@@ -202,7 +202,7 @@ function logError(endpoint: string, message: string, e: any) {
             if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
             try {
                 const token = req.headers.authorization!;
-                if (token != adminToken) throw new Error("Inavlid admin token");
+                if (token != adminToken) throw new Error("Invalid admin token");
                 const id = req.params.id as string;
                 apiSuccess<Source>(res, await database.getSource(id));
             } catch (e) {
@@ -221,7 +221,7 @@ function logError(endpoint: string, message: string, e: any) {
             if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
             try {
                 const token = req.headers.authorization!;
-                if (token != adminToken) throw new Error("Inavlid admin token");
+                if (token != adminToken) throw new Error("Invalid admin token");
                 const id = req.params.id as string;
                 await database.deleteSource(id);
                 apiSuccess(res);
@@ -238,7 +238,7 @@ function logError(endpoint: string, message: string, e: any) {
         if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
         try {
             const token = req.headers.authorization!;
-            if (token != adminToken) throw new Error("Inavlid admin token");
+            if (token != adminToken) throw new Error("Invalid admin token");
             const source = req.body as Source;
             apiSuccess<Source>(res, await database.setSource(source));
         } catch (e) {
@@ -253,7 +253,7 @@ function logError(endpoint: string, message: string, e: any) {
         if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
         try {
             const token = req.headers.authorization!;
-            if (token != adminToken) throw new Error("Inavlid admin token");
+            if (token != adminToken) throw new Error("Invalid admin token");
             const sourceId = req.params.id as string;
             const job = await jobs.getJob(sourceId);
             apiSuccess(res, job);
@@ -269,7 +269,7 @@ function logError(endpoint: string, message: string, e: any) {
         if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
         try {
             const token = req.headers.authorization!;
-            if (token != adminToken) throw new Error("Inavlid admin token");
+            if (token != adminToken) throw new Error("Invalid admin token");
             const sourceId = req.params.id as string;
             const job = await jobs.startJob(sourceId);
             apiSuccess(res, job);
@@ -288,7 +288,7 @@ function logError(endpoint: string, message: string, e: any) {
             if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
             try {
                 const token = req.headers.authorization!;
-                if (token != adminToken) throw new Error("Inavlid admin token");
+                if (token != adminToken) throw new Error("Invalid admin token");
                 const sourceId = req.params.id as string;
                 const job = await jobs.stopJob(sourceId);
                 apiSuccess(res, job);
@@ -308,7 +308,7 @@ function logError(endpoint: string, message: string, e: any) {
             if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
             try {
                 const token = req.headers.authorization!;
-                if (token != adminToken) throw new Error("Inavlid admin token");
+                if (token != adminToken) throw new Error("Invalid admin token");
                 const collectionId = req.params.collectionId as string;
                 const sourceId = req.params.sourceId as string;
                 const offset = parseInt((req.query.offset as string) ?? "0");
@@ -331,7 +331,7 @@ function logError(endpoint: string, message: string, e: any) {
             if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
             try {
                 const token = req.headers.authorization!;
-                if (token != adminToken) throw new Error("Inavlid admin token");
+                if (token != adminToken) throw new Error("Invalid admin token");
                 const collectionId = req.params.collectionId as string;
                 const sourceId = req.params.sourceId as string;
                 const query = req.query.query as string;
@@ -354,7 +354,7 @@ function logError(endpoint: string, message: string, e: any) {
             if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
             try {
                 const token = req.headers.authorization!;
-                if (token != adminToken) throw new Error("Inavlid admin token");
+                if (token != adminToken) throw new Error("Invalid admin token");
                 const collectionId = req.params.collectionId as string;
                 const offset = parseInt((req.query.offset as string) ?? "0");
                 const limit = parseInt((req.query.limit as string) ?? "25");
@@ -362,6 +362,26 @@ function logError(endpoint: string, message: string, e: any) {
                 apiSuccess(res, response);
             } catch (e) {
                 const error = "Could not get chats of collection " + req.params.collectionId;
+                logError(req.path, error, e);
+                apiError(res, error);
+            }
+        }
+    );
+
+    app.get(
+        "/api/chatsession/:sessionId",
+        [header("authorization").notEmpty().isString(), param("sessionId").notEmpty().isString()],
+        async (req: Request, res: Response) => {
+            const errors = validationResult(req);
+            if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
+            try {
+                const token = req.headers.authorization!;
+                if (token != adminToken) throw new Error("Invalid admin token");
+                const sessionId = req.params.sessionId as string;
+                const response = await database.getChat(sessionId);
+                apiSuccess(res, response);
+            } catch (e) {
+                const error = "Could not get chat " + req.params.sessionId;
                 logError(req.path, error, e);
                 apiError(res, error);
             }
@@ -381,6 +401,26 @@ function logError(endpoint: string, message: string, e: any) {
             apiError(res, "Unknown server error");
         }
     });
+
+    app.post(
+        "/api/deleteSession",
+        [header("authorization").notEmpty().isString(), body("sessionId").notEmpty().isString()],
+        async (req: Request, res: Response) => {
+            const errors = validationResult(req);
+            if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
+            try {
+                const token = req.headers.authorization!;
+                if (token != adminToken) throw new Error("Invalid admin token");
+                const sessionId = req.body.sessionId as string;
+                const response = await database.deleteChat(sessionId);
+                apiSuccess(res, response);
+            } catch (e) {
+                const error = "Could not delete chat " + req.body.sessionId;
+                logError(req.path, error, e);
+                apiError(res, error);
+            }
+        }
+    );
 
     app.post(
         "/api/complete",

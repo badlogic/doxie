@@ -156,7 +156,7 @@ export abstract class StreamView<T> extends LitElement {
         `;
     }
 
-    abstract renderItem(item: T, polledItems: boolean): TemplateResult;
+    abstract renderItem(item: T, polledItems: boolean): TemplateResult | HTMLElement;
 
     static renderWrapped(item: TemplateResult | HTMLElement): TemplateResult {
         return html`<div class="w-full px-4 py-2 border-b border-divider">${item}</div>`;
@@ -209,7 +209,8 @@ export abstract class StreamView<T> extends LitElement {
         // Render the items in the container
         const items: HTMLElement[] = [];
         for (const item of page.items) {
-            const renderedItem = dom(this.renderItemInternal(item, polledItems))[0];
+            const result = this.renderItemInternal(item, polledItems);
+            const renderedItem = result instanceof HTMLElement ? result : dom(result)[0];
             items.push(renderedItem);
             container.append(renderedItem);
         }

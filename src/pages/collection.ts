@@ -136,6 +136,7 @@ export class CollectionPage extends BaseElement {
         return html`<div class="${pageContainerStyle}">
             ${topBar}
             <div class="${pageContentStyle} px-4 gap-4">
+                <a href="/chat/${collection._id!}" class="button self-start">${i18n("Chat")}</a>
                 <span class="self-start text-xs text-muted-fg font-semibold -mb-6 ml-2 bg-background z-[5] px-1">${i18n("Name")}</span>
                 <input
                     id="name"
@@ -540,14 +541,29 @@ class ChatSessionStreamView extends StreamView<ChatSession> {
         this.wrapItem = false;
     }
 
-    renderItem(item: ChatSession, polledItems: boolean): TemplateResult {
+    renderItem(item: ChatSession, polledItems: boolean) {
         const messages = item.rawMessages.filter((message) => message.role == "user");
         if (messages.length == 0) {
             return html`<div></div> `;
         }
-        return html`<div>
+        const chatDom = dom(html`<div class="border border-divider rounded-md p-4 mb-4 flex flex-col gap-2">
+            <div class="flex">
+                <a href="/replay/${item._id}" class="button self-start">${i18n("Replay")}</a>
+                <button
+                    class="ml-auto hover:text-primary w-6 h-6 flex items-center justify-center"
+                    @click=${() => this.deleteSession(chatDom, item._id!)}
+                >
+                    <i class="icon w-5 h-5">${deleteIcon}</i>
+                </button>
+            </div>
             ${map(messages, (message) => html`<a class="w-full flex flex-col p-2 border border-divider rounded-lg mt-2">${message.content}</a>`)}
-        </div>`;
+        </div>`)[0];
+        return chatDom;
+    }
+
+    async deleteSession(element: HTMLElement, sessionId: string) {
+        element.remove();
+        await Api.deleteSession(Store.getAdminToken()!, sessionId);
     }
 }
 

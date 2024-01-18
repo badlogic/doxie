@@ -210,6 +210,10 @@ export class Api {
         return apiPost<{ sessionId: string }>("createSession", { collectionId, sourceId });
     }
 
+    static deleteSession(adminToken: string, sessionId: string | undefined) {
+        return apiPost<void>("deleteSession", { sessionId }, adminToken);
+    }
+
     static async complete(
         sessionId: string,
         message: string,
@@ -358,6 +362,10 @@ export class Api {
             "chats/" + encodeURIComponent(collectionId) + `?offset=${encodeURIComponent(offset)}&limit=${encodeURIComponent(limit)}`,
             adminToken
         );
+    }
+
+    static async getChat(adminToken: string, sessionId: string) {
+        return apiGet<ChatSession>("chatsession/" + encodeURIComponent(sessionId), adminToken);
     }
 
     static async queryDocuments(adminToken: string, collectionId: string, sourceId: string, query: string, k: number = 5) {

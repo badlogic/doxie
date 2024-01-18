@@ -155,11 +155,11 @@
     }
 
     .chat-message-bot ol {
-        @apply list-disc list-inside pl-4;
+        @apply list-decimal list-inside space-y-1;
     }
 
     .chat-message-bot ul {
-        @apply list-disc list-inside pl-4;
+        @apply list-disc list-inside space-y-1;
     }
 }
 

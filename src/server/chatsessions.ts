@@ -7,7 +7,8 @@ import { ChatMessage, ChatSession, CompletionDebug, VectorDocument } from "../co
 import { Database, VectorStore } from "./database";
 
 const tiktokenEncoding = getEncoding("cl100k_base");
-const openaiModel = "gpt-3.5-turbo";
+const chatModel = "gpt-3.5-turbo";
+const queryExpansionModel = "gpt-3.5-turbo";
 
 export class ChatSessions {
     readonly openai: OpenAI;
@@ -22,38 +23,40 @@ export class ChatSessions {
 
     async createSession(ip: string, collectionId: string, sourceId?: string) {
         const contextInstructions = `
-A user question starts with the actual question. Next you find one or more sections delimited with ###context-<id-of-section>. Each section
-has additional context that may or may not be relevant to the user question. A user question is formated like this:
+You are given a context and a user question in this format:
 
-"
-<user question>
+\`\`\`
 ###context-0
-<context title>
-<context text>
+... context text ...
 ###context-1
-<context title>
-<context text>
+... context text ...
 ...
-"
+###question
+... user question ...
+\`\`\`
 
-To create your answer, follow these steps:
+Follow these steps to answer:
 - Read the query, which is delimited by ###question
 - Read the context sections
-- Read the previous questions and take them into account if relevant
-- IMPORTANT: Answer in the language of the query. Use any relevant from the context sections.
-- For each context section you have used, output ###context-<id-of-section>
-- IMPORTANT! After you print your answer, print ###summary, followed by a single sentence summarizing your answer.
-- If the user changes topic, print ###topicdrift.
-- The initial topic is unknown, so do not print ###topicdrift in your first response
+- Take the conversation history into account.
+- For each context section you have used, output ###context-<id-of-section>.
+- If the user changes topic, print ###topicdrift. The initial topic is unknown, so do not print ###topicdrift in your first response
+- IMPORTANT: Never output the text of a context section in your answer! THIS IS VERY IMPORTANT!
+- IMPORTANT: After you print your answer, print ###summary, followed by a single sentence summarizing your answer!
+- IMPORTANT: Answer in the language of the query!
 
-Your replies should be formated like this:
-"
-<your answer>
+You MUST give your answer in this format:
+
+\`\`\`
+... your answer ...
 ###context-1
 ###context-4
 ###summary
-<your single sentence summary>
+... your single sentence summary ...
 ###topicdrift
+\`\`\`
+
+Remember: NEVER forget to output the single sentence summary!
         `;
 
         const session: ChatSession = {
@@ -76,34 +79,35 @@ Your replies should be formated like this:
     }
 
     async expandQuery(query: string, context: string) {
-        const systemMessage = `you are a query expansion system. you are used to expand queries with sentences or phrases to increase the precision and recall in an information retrieval system that uses the OpenAI Ada model for text embeddings.
-
-Your input is the raw natural language query followed by the (optional) conversation history between the user and an information retrieval assistant:
-"
-was mache ich als programmierer?
-
+        const systemMessage = `
+You are a query expansion system. You are given a user query and a optional conversation history in this format:
+\`\`\`
 ###history
-user: wie werde ich programmierer?
-assistant: Um Programmierer zu werden, sollten Sie eine Ausbildung im Bereich Informatik, Technische Informatik oder Wirtschaftsinformatik absolvieren. Universitäten und Fachhochschulen bieten Studiengänge mit Schwerpunkten in verschiedenen Anwendungsgebieten wie medizinische Assistenz-Systeme, E-Health, Automotive, Prozessleittechnik oder Mechatronik an.
-user: was kann ich verdienen?
-assistant: Das Einkommen für ProgrammiererInnen kann je nach Qualifikation, Erfahrung und dem konkreten Aufgabenbereich variieren. Ein formaler Abschluss im IT-Bereich sowie Spezialisierungen in Datensicherheit und anderen relevanten Bereichen können sich positiv auf das Gehalt auswirken. Zudem ist lebenslanges Lernen aufgrund des ständigen technologischen Fortschritts unerlässlich.
-"
+###user
+... user message ...
+###assistant
+... assistant message ...
+###user
+...user message ...
+###assistant
+... assistant message ...
+...
+###raw query
+... the raw user query to expand ...
+\`\`\`
 
-The user may change topic with respect to the history, in which case you ignore the history and generate an expansion just for the user query itself.
+Follow these steps:
 
-You output sentences and phrases based on the query and taking into account the history, which will be combined with the user query and used to retrieve relevant documents. Example output:
-
-"
-Tätigkeiten als Programmierer
-Aufgaben eines Programmierers
-Berufsbild Programmierer
-"`;
+1. Read the raw user query and the optional history. If the history is empty or is not related to the raw user query, ignore it. This forms your context.
+2. Based on the context, create 5 unique and relevant query variations. Do not use names or nouns that are not in the context.
+3. Output each query variation on its own line, without any additional formatting or labels.
+`.trim();
         let start = performance.now();
         const response = await this.openai.chat.completions.create({
-            model: openaiModel,
+            model: queryExpansionModel,
             messages: [
                 { role: "system", content: systemMessage },
-                { role: "user", content: query + (context.trim().length == 0 ? "" : "\n\n###history" + context.trim()) },
+                { role: "user", content: (context.trim().length == 0 ? "" : "\n\n###history" + context.trim()) + "\n\n###raw query\n" + query },
             ],
         });
         console.log("Expanding query took: " + ((performance.now() - start) / 1000).toFixed(3) + " secs");
@@ -128,11 +132,15 @@ Berufsbild Programmierer
             }
             historyMessages.push(rawMessage);
         }
-        let ragHistory = historyMessages
-            .filter((msg) => msg.role != "system")
-            .map((msg) => msg.role + ": " + msg.content?.toString().replaceAll("###topicdrift", ""))
-            .join("\n\n");
-        let ragQuery = message + " " + ((await this.expandQuery(message, ragHistory)) ?? "");
+        let ragHistory =
+            "###history\n" +
+            historyMessages
+                .filter((msg) => msg.role != "system")
+                .map((msg) =>
+                    msg.content.trim().length == 0 ? "" : "###" + msg.role + "\n" + msg.content?.toString().replaceAll("###topicdrift", "").trim()
+                )
+                .join("\n\n");
+        let ragQuery = message + "\n" + ((await this.expandQuery(message, ragHistory)) ?? "");
 
         // Query vector db with expanded query
         const context = await this.vectors.query(session.collectionId, session.sourceId, ragQuery, 25);
@@ -159,7 +167,7 @@ Berufsbild Programmierer
 
         // Create new user message, composed of user message and RAG context
         const contextContent = context.map((doc, index) => "###context-" + index + "\n" + doc.docTitle + "\n" + doc.text).join("\n\n");
-        const messageContent = `###question\n${message}\n\n${contextContent}`;
+        const messageContent = `${contextContent}\n\n###question\n${message}`;
         session.messages.push({
             role: "user",
             content: messageContent,
@@ -170,7 +178,7 @@ Berufsbild Programmierer
         let response = "";
         const submittedMessages = [session.rawMessages[0], ...historyMessages];
         submittedMessages.push(session.messages[session.messages.length - 1]);
-        const stream = await this.openai.chat.completions.create({ model: openaiModel, messages: submittedMessages, stream: true });
+        const stream = await this.openai.chat.completions.create({ model: chatModel, messages: submittedMessages, stream: true });
 
         // Stream response. If a command is detected, stop calling the chunk callback
         // so frontend never sees commands.
@@ -247,7 +255,7 @@ Berufsbild Programmierer
 
         // Record history, use summary of GPT reply instead of full reply
         session.messages.push({ role: "assistant", content: response });
-        session.rawMessages.push({ role: "assistant", content: (response.split("###summary")[1] ?? response) + (topicDrift ? "###topicdrift" : "") });
+        session.rawMessages.push({ role: "assistant", content: (response.split("###summary")[1] ?? "\n") + (topicDrift ? "###topicdrift" : "") });
         session.lastModified = new Date().getTime();
         this.database.setChat(session);
     }

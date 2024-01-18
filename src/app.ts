@@ -51,6 +51,11 @@ export class App extends LitElement {
             () => "Chat"
         );
         router.addRoute(
+            "/replay/:chatsession",
+            () => html`<chat-page></chat-page>`,
+            () => "Chat Replay"
+        );
+        router.addRoute(
             "/admin",
             () => html`<admin-page></admin-page>`,
             () => "Admin"
