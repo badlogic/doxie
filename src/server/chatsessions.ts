@@ -7,8 +7,8 @@ import { ChatMessage, ChatSession, CompletionDebug, VectorDocument } from "../co
 import { Database, VectorStore } from "./database";
 
 const tiktokenEncoding = getEncoding("cl100k_base");
-const chatModel = "gpt-3.5-turbo";
-const queryExpansionModel = "gpt-3.5-turbo";
+const chatModel = "gpt-3.5-turbo-1106";
+const queryExpansionModel = "gpt-3.5-turbo-1106";
 
 export class ChatSessions {
     readonly openai: OpenAI;
@@ -22,42 +22,35 @@ export class ChatSessions {
     }
 
     async createSession(ip: string, collectionId: string, sourceId?: string) {
-        const contextInstructions = `
-You are given a context and a user question in this format:
+        let contextInstructions = `
+You are the assistant. The user will give you text snippets and a question to answer. The user will use this format:
+---snippet-0
+<text of snippet with id 0>
+---snippet-1
+<text of snippet with id 1>
+---snippet-2
+<text of snippet with id 2>
+---snippet-3
+<text of snippet with id 3>
+---snippet-4
+<text of snippet with id 4>
+---question
+<text of user question>
 
-\`\`\`
-###context-0
-... context text ...
-###context-1
-... context text ...
-...
-###question
-... user question ...
-\`\`\`
+Perform these steps:
+1. Read the snippets and user question.
+2. Output a list of all relevant snippet ids, separated by a space. If no snippets are relevant, output a new line.
+3. Output an answer to the user question using the information found in the relevant snippets.
+4. Output a 1 sentence summary of your answer.
 
-Follow these steps to answer:
-- Read the query, which is delimited by ###question
-- Read the context sections
-- Take the conversation history into account.
-- For each context section you have used, output ###context-<id-of-section>.
-- If the user changes topic, print ###topicdrift. The initial topic is unknown, so do not print ###topicdrift in your first response
-- IMPORTANT: Never output the text of a context section in your answer! THIS IS VERY IMPORTANT!
-- IMPORTANT: After you print your answer, print ###summary, followed by a single sentence summarizing your answer!
-- IMPORTANT: Answer in the language of the query!
-
-You MUST give your answer in this format:
-
-\`\`\`
-... your answer ...
-###context-1
-###context-4
-###summary
-... your single sentence summary ...
-###topicdrift
-\`\`\`
-
-Remember: NEVER forget to output the single sentence summary!
-        `;
+Follow this output format exactly:
+---snippets
+<List of relevant snippet ids separated by space, e.g. "---snippet-0 ---snippet-3", or a new line>
+---answer
+<Text of your answerr>
+---summary
+<Text of a 1 sentence summary of your answer>
+        `.trim();
 
         const session: ChatSession = {
             collectionId,
@@ -69,46 +62,50 @@ Remember: NEVER forget to output the single sentence summary!
             messages: [],
             rawMessages: [],
         };
-        // new ChatSession(ip);
-        const systemPrompt = (await this.database.getCollection(collectionId)).systemPrompt;
+
+        const collection = await this.database.getCollection(collectionId);
+        const systemPrompt = collection.systemPrompt;
         if (!systemPrompt) throw new Error("Couldn't find system prompt for collection " + collectionId);
-        session.messages.push({ role: "system", content: systemPrompt + "\n\n" + contextInstructions });
-        session.rawMessages.push({ role: "system", content: systemPrompt + "\n\n" + contextInstructions });
+        const initialMessages: ChatMessage[] = [
+            { role: "system", content: systemPrompt + "\n\n" + contextInstructions },
+            { role: "assistant", content: collection.botWelcome ?? "How can I assist you today?" },
+        ];
+        session.messages.push(...initialMessages);
+        session.rawMessages.push(...initialMessages);
         await this.database.setChat(session);
         return session._id!;
     }
 
     async expandQuery(query: string, context: string) {
-        const systemMessage = `
-You are a query expansion system. You are given a user query and a optional conversation history in this format:
-\`\`\`
-###history
-###user
-... user message ...
-###assistant
-... assistant message ...
-###user
-...user message ...
-###assistant
-... assistant message ...
-...
-###raw query
-... the raw user query to expand ...
-\`\`\`
+        context = (context.trim().length == 0 ? "" : context.trim()) + "\n\n---rawquery\n" + query;
+        const prompt = `
+You will be provided with text delimited by triple quotes. It starts with an optional conversation history between
+a user and an assistant, where messages by the user are delimited by ---user, and messages by the assistant are
+delimited by ---assistant. After the optional conversation history, you'll find a raw query, delimited by
+---rawquery
 
-Follow these steps:
+Perform these steps:
+2. Generate 5 alternative queries that express the same intent as the raw query. The raw query is more important than the history.
+3. Output the 5 alternative queries, one per line, without any formatting
 
-1. Read the raw user query and the optional history. If the history is empty or is not related to the raw user query, ignore it. This forms your context.
-2. Based on the context, create 5 unique and relevant query variations. Do not use names or nouns that are not in the context.
-3. Output each query variation on its own line, without any additional formatting or labels.
+Use this format:
+<alterantive query 1>
+<alterantive query 2>
+<alterantive query 3>
+<alterantive query 4>
+<alterantive query 5>
+
+The text:
+"""
+${context}
+"""
 `.trim();
+
         let start = performance.now();
         const response = await this.openai.chat.completions.create({
             model: queryExpansionModel,
-            messages: [
-                { role: "system", content: systemMessage },
-                { role: "user", content: (context.trim().length == 0 ? "" : "\n\n###history" + context.trim()) + "\n\n###raw query\n" + query },
-            ],
+            messages: [{ role: "user", content: prompt }],
+            temperature: 0,
         });
         console.log("Expanding query took: " + ((performance.now() - start) / 1000).toFixed(3) + " secs");
         return response.choices[0].message.content;
@@ -117,36 +114,36 @@ Follow these steps:
     async complete(sessionId: string, message: string, chunkcb: (chunk: string, type: "text" | "debug") => void) {
         const session = await this.database.getChat(sessionId);
         if (!session) throw new Error("Session does not exist");
-        message = message.trim();
 
         // Check debug flag in message
-        session.debug = session.debug || message.includes("###debug");
-        message = message.replaceAll("###debug", "");
+        session.debug = session.debug || message.includes("---debug");
+        message = message.replaceAll("---debug", "").trim();
 
-        // RAG, use history as part of rag query to establish more context
+        // RAG, use history as part of rag query to establish more contextd
         const historyMessages: ChatMessage[] = [];
-        for (const rawMessage of session.rawMessages) {
-            if (rawMessage.role == "system") continue;
-            if ((rawMessage.content as string).includes("###topicdrift")) {
+        for (let i = 1; i < session.rawMessages.length; i++) {
+            const rawMessage = session.rawMessages[i];
+            if ((rawMessage.content as string).includes("---topicdrift") && i > 1) {
                 historyMessages.length = 0;
+                historyMessages.push(session.rawMessages[1]);
             }
             historyMessages.push(rawMessage);
         }
-        let ragHistory =
-            "###history\n" +
-            historyMessages
-                .filter((msg) => msg.role != "system")
-                .map((msg) =>
-                    msg.content.trim().length == 0 ? "" : "###" + msg.role + "\n" + msg.content?.toString().replaceAll("###topicdrift", "").trim()
-                )
-                .join("\n\n");
+        let ragHistory = historyMessages
+            .filter((msg) => msg.role != "system")
+            .map((msg) =>
+                msg.content.trim().length == 0 ? "" : "---" + msg.role + "\n" + msg.content?.toString().replaceAll("---topicdrift", "").trim()
+            )
+            .join("\n\n");
         let ragQuery = message + "\n" + ((await this.expandQuery(message, ragHistory)) ?? "");
 
         // Query vector db with expanded query
         const context = await this.vectors.query(session.collectionId, session.sourceId, ragQuery, 25);
 
         // Rerank results via cohere if enabled
-        if (this.cohere) {
+        const useCohere = true;
+        if (this.cohere && useCohere) {
+            const start = performance.now();
             const reranked: RerankRequestDocumentsItem[] = context.map((doc) => {
                 return { text: doc.text };
             });
@@ -163,11 +160,14 @@ Follow these steps:
             }
             context.length = 0;
             context.push(...newContext);
+            console.log("Reranking took: " + ((performance.now() - start) / 1000).toFixed(3) + " secs");
+        } else {
+            context.length = 5;
         }
 
         // Create new user message, composed of user message and RAG context
-        const contextContent = context.map((doc, index) => "###context-" + index + "\n" + doc.docTitle + "\n" + doc.text).join("\n\n");
-        const messageContent = `${contextContent}\n\n###question\n${message}`;
+        const contextContent = context.map((doc, index) => "---snippet-" + index + "\n" + doc.docTitle + "\n" + doc.text).join("\n\n");
+        const messageContent = `${contextContent}\n\n---question\n${message}`;
         session.messages.push({
             role: "user",
             content: messageContent,
@@ -178,29 +178,65 @@ Follow these steps:
         let response = "";
         const submittedMessages = [session.rawMessages[0], ...historyMessages];
         submittedMessages.push(session.messages[session.messages.length - 1]);
-        const stream = await this.openai.chat.completions.create({ model: chatModel, messages: submittedMessages, stream: true });
 
         // Stream response. If a command is detected, stop calling the chunk callback
         // so frontend never sees commands.
-        let first = true;
-        let commandCharFound = false;
-        for await (const completion of stream) {
-            if (first) {
-                completion.choices[0].delta.content = completion.choices[0].delta.content?.trimStart();
-                first = false;
+        const start = performance.now();
+        let tries = 2;
+        let answer = "";
+        while (tries > 0) {
+            const stream = await this.openai.chat.completions.create({ model: chatModel, messages: submittedMessages, temperature: 0, stream: true });
+            let first = true;
+            let inAnswer = false;
+            let waitForNextDelta = false;
+            for await (const completion of stream) {
+                if (first) {
+                    completion.choices[0].delta.content = completion.choices[0].delta.content?.trimStart();
+                    first = false;
+                }
+
+                response += completion.choices[0].delta.content ?? "";
+                if (response.endsWith("---answer")) {
+                    inAnswer = true;
+                    continue;
+                }
+                if (inAnswer && response.endsWith("---")) {
+                    waitForNextDelta = true;
+                    continue;
+                }
+                if (waitForNextDelta && response.endsWith("---summary")) {
+                    inAnswer = false;
+                    waitForNextDelta = false;
+                    continue;
+                }
+                const delta = completion.choices[0].delta.content;
+                if (inAnswer && delta && delta.length > 0) {
+                    chunkcb(delta, "text");
+                    answer += completion.choices[0].delta.content ?? "";
+                }
             }
-            if (completion.choices[0].delta.content?.includes("###")) {
-                commandCharFound = true;
+            if (answer.trim().length > 0) {
+                if (tries < 2) {
+                    const answer = submittedMessages.pop()!;
+                    submittedMessages.pop();
+                    submittedMessages.pop();
+                    submittedMessages.push(answer);
+                }
+                break;
             }
-            if (!commandCharFound) chunkcb(completion.choices[0].delta.content ?? "", "text");
-            response += completion.choices[0].delta.content ?? "";
+            const query = submittedMessages.pop()!;
+            submittedMessages.length = 2;
+            submittedMessages.push(query);
+            console.log("Model did not follow output format. Cutting history");
+            tries--;
+            answer = "";
         }
 
         // If one or more of the contexts was used, print links
-        const usedContext = response.includes("###context-");
+        const usedContext = response.includes("---snippet-");
         if (usedContext) {
             const extractIDs = (text: string): number[] => {
-                const regex = /###context-(\d+)/g;
+                const regex = /---snippet-(\d+)/g;
                 let match;
                 const ids: number[] = [];
 
@@ -231,7 +267,7 @@ Follow these steps:
         }
 
         // Check if there was topic drift
-        const topicDrift = response.includes("###topicdrift");
+        const topicDrift = response.includes("---topicdrift");
 
         // Check if we should show debug output
         if (session.debug) {
@@ -254,9 +290,11 @@ Follow these steps:
         }
 
         // Record history, use summary of GPT reply instead of full reply
-        session.messages.push({ role: "assistant", content: response });
-        session.rawMessages.push({ role: "assistant", content: (response.split("###summary")[1] ?? "\n") + (topicDrift ? "###topicdrift" : "") });
+        const summary = response.split("---summary")[1] ?? answer.substring(0, Math.min(200, answer.length - 1)) + " ...";
+        session.messages.push({ role: "assistant", content: response.split("---")[0].trim() });
+        session.rawMessages.push({ role: "assistant", content: summary + (topicDrift ? "---topicdrift" : "") });
         session.lastModified = new Date().getTime();
         this.database.setChat(session);
+        console.log("Completion took: " + ((performance.now() - start) / 1000).toFixed(3) + " secs");
     }
 }

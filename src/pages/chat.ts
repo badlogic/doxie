@@ -11,6 +11,7 @@ import { markedHighlight } from "marked-highlight";
 import hljs from "highlight.js";
 import { map } from "lit/directives/map.js";
 import { Store } from "../utils/store";
+import { escapeHtml } from "../utils/utils";
 
 export const chatDefaultCss = `
 :root {
@@ -120,7 +121,7 @@ export class ChatMessageElement extends BaseElement {
             ${botIcon
                 ? html`<img class="chat-icon-img" src="/files/${botIcon}" />`
                 : html`<div class="chat-icon-noimg flex-shrink-0 flex items-center justify-center">
-                      <span>${this.botName.charAt(0).toUpperCase()}</span>
+                      <span>${name.charAt(0).toUpperCase()}</span>
                   </div>`}
             <div class="w-full flex flex-col">
                 <div class="chat-message-name">${name}</div>
@@ -203,11 +204,12 @@ export class ChatGptReply extends BaseElement {
         const debugResponse = this.debug?.response;
         const debugTokens = (this.debug?.tokensIn ?? 0) + (this.debug?.tokensOut ?? 0);
         const debugHighlight = (content: string) => {
+            content = escapeHtml(content);
             const result = content
-                .replaceAll(/###context-(\d+)/g, '<b class="text-blue-400">###context-$1</b>')
-                .replaceAll(/###question/g, '<b class="text-blue-400">###question</b>')
-                .replaceAll(/###summary/g, '<b class="text-blue-400">###summary</b>')
-                .replaceAll(/###topicdrift/g, '<b class="text-blue-400">###topicdrift</b>');
+                .replaceAll(/---snippet-(\d+)/g, '<b class="text-blue-400">---snippet-$1</b>')
+                .replaceAll(/---question/g, '<b class="text-blue-400">---question</b>')
+                .replaceAll(/---/g, '<b class="text-blue-400">---</b>')
+                .replaceAll(/---topicdrift/g, '<b class="text-blue-400">---topicdrift</b>');
             return result;
         };
 
@@ -451,7 +453,7 @@ export class ChatPage extends BaseElement {
         if (!this.replayMessages) return;
         if (this.replayIndex == this.replayMessages?.length) return;
         const message = this.replayMessages[this.replayIndex++];
-        this.text = message.content + (this.replayIndex == 1 ? " ###debug" : "");
+        this.text = message.content + (this.replayIndex == 1 ? " ---debug" : "");
         this.querySelector<HTMLTextAreaElement>("#editor")!.value = this.text;
         this.complete();
     }
