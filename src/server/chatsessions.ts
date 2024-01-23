@@ -81,11 +81,12 @@ Follow this output format exactly:
         const prompt = `
 You will be provided with text delimited by triple quotes. It starts with an optional conversation history between
 a user and an assistant, where messages by the user are delimited by ---user, and messages by the assistant are
-delimited by ---assistant. After the optional conversation history, you'll find a raw query, delimited by
----rawquery
+delimited by ---assistant. After the optional conversation history, the next question by the user, delimited by
+---rawquery. Your goal is it to expand this next question, while retaining its intent.
 
 Perform these steps:
-2. Generate 5 alternative queries that express the same intent as the raw query. The raw query is more important than the history.
+1. Read the conversation history and resolve references in the raw query to previous messages to make the raw query more precise.
+2. Generate 5 alternative queries that express the same intent as the raw query.
 3. Output the 5 alternative queries, one per line, without any formatting
 
 Use this format:
