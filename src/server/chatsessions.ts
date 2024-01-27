@@ -24,32 +24,38 @@ export class ChatSessions {
     async createSession(ip: string, collectionId: string, sourceId?: string) {
         let contextInstructions = `
 You are the assistant. The user will give you text snippets and a question to answer. The user will use this format:
----snippet-0
-<text of snippet with id 0>
----snippet-1
-<text of snippet with id 1>
----snippet-2
-<text of snippet with id 2>
----snippet-3
-<text of snippet with id 3>
----snippet-4
-<text of snippet with id 4>
+---snippet <url of snippet with id 0>
+<title of snippet with id 0>
+<multi-line text of snippet with id 0>
+---snippet <url of snippet with id 1>
+<title of snippet with id 1>
+<multi-line text of snippet with id 1>
+---snippet <url of snippet with id 2>
+<title of snippet with id 2>
+<multi-line text of snippet with id 2>
+---snippet <url of snippet with id 3>
+<title of snippet with id 3>
+<multi-line text of snippet with id 3>
+---snippet <url of snippet with id 4>
+<title of snippet with id 4>
+<multi-line text of snippet with id 4>
+... more snippets ...
 ---question
-<text of user question>
+<multi-line text of user question>
 
 Perform these steps:
-1. Read the snippets and user question.
-2. Output a list of all relevant snippet ids, separated by a space. If no snippets are relevant, output a new line.
-3. Output an answer to the user question using the information found in the relevant snippets.
-4. Output a 1 sentence summary of your answer.
+1. Read the snippets and user question. Focus on the user question and think of an answer based on the previous conversation and the snippets.
+2. Output an answer to the user question using the information found in the relevant snippets. Follow these rules when composing your answer:
+   a. If you answer based on the text of a snippet, and the snippet url starts with http or https add a markdown link of the form \`[phrase or snippet title](snippet url)\`.
+   b. Do not say "you can find more information in this snippet" or similar things referring to snippets provided to you.
+   c. Retain markdown links, code, and images were applicable.
+   d. Prefer lists if applicable.
+3. Output a 2 sentence summary of your answer. Delimit it with \`---summary\`
 
 Follow this output format exactly:
----snippets
-<List of relevant snippet ids separated by space, e.g. "---snippet-0 ---snippet-3", or a new line>
----answer
-<Text of your answerr>
+<multi-line text of your answer>
 ---summary
-<Text of a 1 sentence summary of your answer>
+<text of your 2 sentence summary of your answer>
         `.trim();
 
         const session: ChatSession = {
@@ -150,7 +156,7 @@ ${context}
             });
             const response = await this.cohere.rerank({
                 model: `rerank-multilingual-v2.0`,
-                topN: 5,
+                topN: 10,
                 query: ragQuery,
                 returnDocuments: false,
                 documents: reranked,
@@ -163,11 +169,11 @@ ${context}
             context.push(...newContext);
             console.log("Reranking took: " + ((performance.now() - start) / 1000).toFixed(3) + " secs");
         } else {
-            context.length = 5;
+            context.length = 10;
         }
 
         // Create new user message, composed of user message and RAG context
-        const contextContent = context.map((doc, index) => "---snippet-" + index + "\n" + doc.docTitle + "\n" + doc.text).join("\n\n");
+        const contextContent = context.map((doc, index) => "---snippet " + doc.docUri.trim() + "\n" + doc.docTitle + "\n" + doc.text).join("\n\n");
         const messageContent = `${contextContent}\n\n---question\n${message}`;
         session.messages.push({
             role: "user",
@@ -188,7 +194,7 @@ ${context}
         while (tries > 0) {
             const stream = await this.openai.chat.completions.create({ model: chatModel, messages: submittedMessages, temperature: 0, stream: true });
             let first = true;
-            let inAnswer = false;
+            let inAnswer = true;
             let waitForNextDelta = false;
             for await (const completion of stream) {
                 if (first) {
@@ -197,10 +203,6 @@ ${context}
                 }
 
                 response += completion.choices[0].delta.content ?? "";
-                if (response.endsWith("---answer")) {
-                    inAnswer = true;
-                    continue;
-                }
                 if (inAnswer && response.endsWith("---")) {
                     waitForNextDelta = true;
                     continue;
@@ -234,7 +236,7 @@ ${context}
         }
 
         // If one or more of the contexts was used, print links
-        const usedContext = response.includes("---snippet-");
+        /*const usedContext = response.includes("---snippet");
         if (usedContext) {
             const extractIDs = (text: string): number[] => {
                 const regex = /---snippet-(\d+)/g;
@@ -265,7 +267,7 @@ ${context}
                     chunkcb("\n\n**Links**\n" + links, "text");
                 }
             }
-        }
+        }*/
 
         // Check if there was topic drift
         const topicDrift = response.includes("---topicdrift");

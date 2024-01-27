@@ -3,7 +3,7 @@ import * as path from "path";
 import htmlToMarkdown from "@wcj/html-to-markdown";
 
 const baseDir = "/Users/badlogic/Downloads/html/";
-const baseUrl = "";
+const baseUrl = "https://www.winccoa.com/documentation/WinCCOA/latest/en_US/";
 
 async function readFiles(dir, callback) {
     fs.readdirSync(dir).forEach(async (file) => {

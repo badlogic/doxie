@@ -329,11 +329,35 @@ export class FlarumSourceElement extends BaseSourceElement {
     source?: FlarumSource;
 
     render() {
-        return html`<div>Flarum source</div>`;
+        const source = this.source;
+        if (!source) return html``;
+
+        return html` <div class="flex flex-col gap-2">
+            <span class="self-start text-xs text-muted-fg font-semibold -mb-4 ml-2 bg-background z-[5] px-1">${i18n("Flarum dump API URL")}</span>
+            <input id="apiUrl" class="textfield py-2 ${source.apiUrl.length == 0 ? "border-red-500" : ""}" .value=${source.apiUrl} @input=${() =>
+            this.handleInput()}></textarea>
+            <span class="self-start text-xs text-muted-fg font-semibold -mb-4 ml-2 bg-background z-[5] px-1">${i18n("Staff user names")}</span>
+            <textarea id="staff" class="textfield py-2" .value=${source.staff.join("\n")} @input=${() => this.handleInput()}></textarea>
+        </div>`;
+    }
+
+    handleInput() {
+        if (!this.source) return;
+        const apiUrl = this.querySelector<HTMLInputElement>("#apiUrl")!.value.trim();
+        const staff = this.querySelector<HTMLTextAreaElement>("#staff")
+            ?.value.trim()
+            .split("\n")
+            .map((staff) => staff.trim())
+            .filter((staff) => staff.length > 0);
+        this.source.apiUrl = apiUrl.trim();
+        this.source.staff = staff ?? [];
+        this.page?.requestUpdate();
+        this.requestUpdate();
     }
 
     canSave(): boolean {
-        return true;
+        if (!this.source) return false;
+        return this.source.apiUrl.length > 0;
     }
 }
 

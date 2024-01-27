@@ -6,6 +6,7 @@ import {
     EmbedderDocument,
     EmbedderDocumentSegment,
     FaqSource,
+    FlarumDiscussion,
     FlarumSource,
     Logger,
     MarkdownZipSource,
@@ -151,8 +152,31 @@ class FaqProccessor extends BaseProcessor<FaqSource> {
 }
 
 class FlarumProccessor extends BaseProcessor<FlarumSource> {
-    process(): Promise<EmbedderDocument[]> {
-        throw new Error("Method not implemented.");
+    async process(): Promise<EmbedderDocument[]> {
+        this.log("Fetching Flarum dump, this may take a while");
+        const response = await fetch(this.source.apiUrl);
+        if (!response.ok) {
+            throw new Error("Could not fetch Flarum forum dump from " + this.source.apiUrl + "\n" + (await response.text()));
+        }
+        const discussions: FlarumDiscussion[] = await response.json();
+        this.log(discussions.length + " discussions");
+        const docs: EmbedderDocument[] = [];
+        let englishPosts = 0;
+        let nonEnglishPosts = 0;
+        for (const discussion of discussions) {
+            if (!discussion.posts) {
+                this.log("No posts in discussion " + discussion.discussionId + " - " + discussion.title);
+                continue;
+            }
+            for (const post of discussion.posts) {
+                if (post.detectedLang != "en") {
+                    nonEnglishPosts++;
+                    continue;
+                }
+            }
+        }
+        this.log("english: " + englishPosts + ", non-english: " + nonEnglishPosts);
+        return [];
     }
 }
 

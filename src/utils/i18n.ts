@@ -75,6 +75,8 @@ export interface Messages {
     "Could not upload .zip": string;
     markdownZipFormat: string;
     Replay: string;
+    "Flarum dump API URL": string;
+    "Staff user names": string;
 }
 
 const english: Messages = {
@@ -157,6 +159,8 @@ const english: Messages = {
 [[description]]
 ... actual content ...<code></code></pre>`,
     Replay: "Replay",
+    "Flarum dump API URL": "Flarum dump API URL",
+    "Staff user names": "Staff user names",
 };
 
 export type LanguageCode = "en";

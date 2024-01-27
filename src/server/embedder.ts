@@ -7,6 +7,8 @@ import { BufferedInputStream, BufferedOutputStream, MemoryBuffer } from "./binar
 // A little less than what's allowed, as the tokenizer might not be accurate
 const maxTokens = 7000;
 
+const embeddingModel = "text-embedding-3-small";
+
 export interface EmbedderBatch {
     tokenCount: number;
     segments: { doc: EmbedderDocument; segment: EmbedderDocumentSegment }[];
@@ -28,7 +30,7 @@ export class Embedder {
     }
 
     async embed(texts: string[]) {
-        const embedding = await this.openaiApi.embeddings.create({ input: texts, model: "text-embedding-ada-002" });
+        const embedding = await this.openaiApi.embeddings.create({ input: texts, model: embeddingModel });
         const result = embedding.data.map((embedding) => embedding.embedding);
         return result;
     }

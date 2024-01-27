@@ -12,6 +12,20 @@ export interface BaseSource {
     description: string;
 }
 
+export type FlarumPost = {
+    createdAt: Number;
+    detectedLang: "en" | string;
+    userName: string;
+    content: String;
+};
+
+export type FlarumDiscussion = {
+    discussionId: Number;
+    createdAt: Number;
+    title: string;
+    posts: FlarumPost[];
+};
+
 export interface FlarumSource extends BaseSource {
     type: "flarum";
     apiUrl: string;
