@@ -23,34 +23,39 @@ export class ChatSessions {
 
     async createSession(ip: string, collectionId: string, sourceId?: string) {
         let contextInstructions = `
-You are the assistant. The user will give you text snippets and a question to answer. The user will use this format:
+In addition to the user question, you are provided with contextual information which you should use to anser the question. The format will be:
 ---snippet <url of snippet with id 0>
 <title of snippet with id 0>
+""""""
 <multi-line text of snippet with id 0>
+""""""
 ---snippet <url of snippet with id 1>
 <title of snippet with id 1>
+""""""
 <multi-line text of snippet with id 1>
+""""""
 ---snippet <url of snippet with id 2>
 <title of snippet with id 2>
+""""""
 <multi-line text of snippet with id 2>
+""""""
 ---snippet <url of snippet with id 3>
 <title of snippet with id 3>
+""""""
 <multi-line text of snippet with id 3>
+""""""
 ---snippet <url of snippet with id 4>
 <title of snippet with id 4>
+"""
 <multi-line text of snippet with id 4>
+"""
 ... more snippets ...
 ---question
 <multi-line text of user question>
 
 Perform these steps:
-1. Read and understand the snippets and user question. Focus on the user question and think of an answer based on the previous conversation and the snippets. Resolve references like "it", "they" and so on to things mentioned in previous questions.
-2. Output an answer to the user question using the information found in the relevant snippets. Follow these rules when composing your answer:
-   a. If you answer based on the text of a snippet, and the snippet url starts with http or https add a markdown link of the form \`[phrase or snippet title](snippet url)\`.
-   b. Do not say "you can find more information in this snippet" or similar things referring to snippets provided to you.
-   c. Retain markdown links, code, and images were applicable.
-   d. Prefer lists if applicable.
-3. Output a 2 sentence summary of your answer. Delimit it with \`---summary\`
+1. Answer the user question based on the snippets or say "I'm sorry I can not help with that" if you can't answer the question based on the information in the snippets.
+2. Generate a 2 sentences long summary of your answer
 
 Follow this output format exactly:
 <multi-line text of your answer>
@@ -173,7 +178,10 @@ ${context}
         }
 
         // Create new user message, composed of user message and RAG context
-        const contextContent = context.map((doc, index) => "---snippet " + doc.docUri.trim() + "\n" + doc.docTitle + "\n" + doc.text).join("\n\n");
+        const contextContent =
+            context
+                .map((doc, index) => "---snippet " + doc.docUri.trim() + "\n" + doc.docTitle + "\n" + `""""""\n` + doc.text + `""""""\n`)
+                .join("\n\n") + `""""""\n`;
         const messageContent = `${contextContent}\n\n---question\n${message}`;
         session.messages.push({
             role: "user",

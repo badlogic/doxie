@@ -17,7 +17,7 @@ import {
 import { Collection as MongoCollection, ObjectId, Document } from "mongodb";
 import { assertNever, sleep } from "../utils/utils";
 import { Embedder } from "./embedder";
-import { ChromaClient, Metadata } from "chromadb";
+import { ChromaClient, Collection, Metadata } from "chromadb";
 import minimatch from "minimatch";
 import xml2js from "xml2js";
 import xpath from "xpath";
@@ -165,6 +165,7 @@ class FlarumProccessor extends BaseProcessor<FlarumSource> {
         let englishPosts = 0;
         let nonEnglishPosts = 0;
         let processed = 0;
+        const staff = new Set<string>(this.source.staff.map((staff) => staff.toLowerCase()));
         const forumUrl = this.source.forumUrl.endsWith("/d/") ? this.source.forumUrl : this.source.forumUrl + "/d/";
         for (const discussion of discussions) {
             if (!discussion.posts) {
@@ -180,11 +181,15 @@ class FlarumProccessor extends BaseProcessor<FlarumSource> {
                 } else {
                     englishPosts++;
                 }
+                if (staff.size > 0 && !staff.has(post.userName.toLowerCase())) {
+                    continue;
+                }
                 const postUri = discussionUri + "/" + postId++;
                 const tokenCount = Embedder.tokenize(post.content).length;
                 const segments: EmbedderDocumentSegment[] = [];
                 const t = discussion.title + "\n";
-                const content = await htmlToMarkdown({ html: discussion.title + "\n" + post.content });
+                // const content = await htmlToMarkdown({ html: discussion.title + "\n" + post.content });
+                const content = discussion.title + "\n" + post.content;
                 if (tokenCount > 500) {
                     const tmpDoc: EmbedderDocument = { uri: postUri, title: discussion.title, text: content, segments: [] };
                     await recursiveSplit(tmpDoc, 1024, 0);
@@ -203,13 +208,14 @@ class FlarumProccessor extends BaseProcessor<FlarumSource> {
                 });
             }
             processed++;
-            if (processed % 10 == 0) {
+            if (processed % 100 == 0) {
                 this.log("Processed " + processed + "/" + discussions.length + " discussions");
-                break;
             }
         }
         this.log("english: " + englishPosts + ", non-english: " + nonEnglishPosts);
         const embedder = new Embedder(this.processor.openaiKey, this.log);
+        this.log("Writting docs to docker/data/" + this.source._id + ".json");
+        fs.writeFileSync("docker/data/" + this.source._id + ".json", JSON.stringify(docs, null, 2), "utf-8");
         await embedder.embedDocuments(docs, this.shouldStop, async (doc) => {});
         return docs;
     }
@@ -433,6 +439,21 @@ class Processor {
         await this.updateJobLog(job._id!, job.log);
     }
 
+    async deleteSourceDocs(collection: Collection, sourceId: string) {
+        const limit = 500;
+        let offset = 0;
+        while (true) {
+            const docIds = await collection.get({ where: { sourceId }, limit, offset, include: [] });
+            if (!docIds.ids || docIds.ids.length == 0) break;
+            await collection.delete({ ids: docIds.ids });
+        }
+
+        const docIds = await collection.get({ where: { sourceId }, limit, offset: 0 });
+        if (docIds.ids?.length > 0) {
+            console.error("Could not delete vectors for source " + sourceId);
+        }
+    }
+
     // Method to process the job
     async process(): Promise<void> {
         while (true) {
@@ -473,7 +494,8 @@ class Processor {
                             name: source.collectionId,
                             embeddingFunction: { generate: (texts) => this.embedder.embed(texts) },
                         });
-                        await collection.delete({ where: { sourceId: source._id! } });
+                        logger("Deleting previous vectors for source " + source._id);
+                        await this.deleteSourceDocs(collection, source._id!);
                         const ids = docs.flatMap((doc) => doc.segments.map((seg, index) => doc.uri + "|" + index));
                         const embeddings = docs.flatMap((doc) => doc.segments.map((seg) => seg.embedding));
                         const metadatas = docs.flatMap((doc) =>
