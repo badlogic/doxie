@@ -4,7 +4,7 @@ Doxie is an experiment in LLM-based information retrieval. Or in plain words: Do
 
 Doxie implements the most basic RAG loop imaginable, with simple context management. Have a look at these source files:
 
--   Srapping and preparing data from a specific source [src/server/berufslexikon.ts](src/server/berufslexikon.ts)
+-   Srapping and preparing data from a specific source [src/server/sources/berufslexikon.ts](src/server/sources/berufslexikon.ts)
 -   Embedding data
     -   [src/server/embedder.ts](src/server/embedder.ts) chunking, embedding
     -   [src/server/embedder-cli.ts](src/server/embedder.ts) takes the output of the scrapper and converts it into a `xxx.embeddings.bin` file to be loaded into the vector database
