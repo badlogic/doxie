@@ -164,6 +164,7 @@ class FlarumProccessor extends BaseProcessor<FlarumSource> {
         const docs: EmbedderDocument[] = [];
         let englishPosts = 0;
         let nonEnglishPosts = 0;
+        let processed = 0;
         const forumUrl = this.source.forumUrl.endsWith("/d/") ? this.source.forumUrl : this.source.forumUrl + "/d/";
         for (const discussion of discussions) {
             if (!discussion.posts) {
@@ -171,7 +172,6 @@ class FlarumProccessor extends BaseProcessor<FlarumSource> {
                 continue;
             }
             const discussionUri = forumUrl + discussion.discussionId;
-            let processed = 0;
             let postId = 1;
             for (const post of discussion.posts) {
                 if (post.detectedLang != "en") {
@@ -203,8 +203,9 @@ class FlarumProccessor extends BaseProcessor<FlarumSource> {
                 });
             }
             processed++;
-            if (processed % 100 == 0) {
+            if (processed % 10 == 0) {
                 this.log("Processed " + processed + "/" + discussions.length + " discussions");
+                break;
             }
         }
         this.log("english: " + englishPosts + ", non-english: " + nonEnglishPosts);
