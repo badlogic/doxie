@@ -76,6 +76,7 @@ export interface Messages {
     markdownZipFormat: string;
     Replay: string;
     "Flarum dump API URL": string;
+    "Flarum forum URL": string;
     "Staff user names": string;
 }
 
@@ -160,6 +161,7 @@ const english: Messages = {
 ... actual content ...<code></code></pre>`,
     Replay: "Replay",
     "Flarum dump API URL": "Flarum dump API URL",
+    "Flarum forum URL": "Flarum forum URL",
     "Staff user names": "Staff user names",
 };
 

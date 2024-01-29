@@ -28,6 +28,7 @@ import { removeElement } from "domutils";
 import * as JSZip from "jszip";
 import { Tiktoken, getEncoding } from "js-tiktoken";
 import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
+import htmlToMarkdown from "@wcj/html-to-markdown";
 
 async function recursiveSplit(doc: EmbedderDocument, chunkSize = 512, chunkOverlap = 0) {
     const splitter = new RecursiveCharacterTextSplitter({
@@ -163,20 +164,53 @@ class FlarumProccessor extends BaseProcessor<FlarumSource> {
         const docs: EmbedderDocument[] = [];
         let englishPosts = 0;
         let nonEnglishPosts = 0;
+        const forumUrl = this.source.forumUrl.endsWith("/d/") ? this.source.forumUrl : this.source.forumUrl + "/d/";
         for (const discussion of discussions) {
             if (!discussion.posts) {
                 this.log("No posts in discussion " + discussion.discussionId + " - " + discussion.title);
                 continue;
             }
+            const discussionUri = forumUrl + discussion.discussionId;
+            let processed = 0;
+            let postId = 1;
             for (const post of discussion.posts) {
                 if (post.detectedLang != "en") {
                     nonEnglishPosts++;
                     continue;
+                } else {
+                    englishPosts++;
                 }
+                const postUri = discussionUri + "/" + postId++;
+                const tokenCount = Embedder.tokenize(post.content).length;
+                const segments: EmbedderDocumentSegment[] = [];
+                const t = discussion.title + "\n";
+                const content = await htmlToMarkdown({ html: discussion.title + "\n" + post.content });
+                if (tokenCount > 500) {
+                    const tmpDoc: EmbedderDocument = { uri: postUri, title: discussion.title, text: content, segments: [] };
+                    await recursiveSplit(tmpDoc, 1024, 0);
+
+                    for (const segment of tmpDoc.segments) {
+                        segments.push(segment);
+                    }
+                } else {
+                    segments.push({ text: content, tokenCount, embedding: [] });
+                }
+                docs.push({
+                    title: discussion.title,
+                    text: "",
+                    uri: postUri,
+                    segments,
+                });
+            }
+            processed++;
+            if (processed % 100 == 0) {
+                this.log("Processed " + processed + "/" + discussions.length + " discussions");
             }
         }
         this.log("english: " + englishPosts + ", non-english: " + nonEnglishPosts);
-        return [];
+        const embedder = new Embedder(this.processor.openaiKey, this.log);
+        await embedder.embedDocuments(docs, this.shouldStop, async (doc) => {});
+        return docs;
     }
 }
 

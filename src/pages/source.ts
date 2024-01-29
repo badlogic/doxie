@@ -69,6 +69,7 @@ export class SourcePage extends BaseElement {
                     name: "",
                     description: "",
                     apiUrl: "",
+                    forumUrl: "",
                     staff: [],
                 };
                 return source;
@@ -334,8 +335,19 @@ export class FlarumSourceElement extends BaseSourceElement {
 
         return html` <div class="flex flex-col gap-2">
             <span class="self-start text-xs text-muted-fg font-semibold -mb-4 ml-2 bg-background z-[5] px-1">${i18n("Flarum dump API URL")}</span>
-            <input id="apiUrl" class="textfield py-2 ${source.apiUrl.length == 0 ? "border-red-500" : ""}" .value=${source.apiUrl} @input=${() =>
-            this.handleInput()}></textarea>
+            <input
+                id="apiUrl"
+                class="textfield py-2 ${source.apiUrl.length == 0 ? "border-red-500" : ""}"
+                .value=${source.apiUrl}
+                @input=${() => this.handleInput()}
+            />
+            <span class="self-start text-xs text-muted-fg font-semibold -mb-4 ml-2 bg-background z-[5] px-1">${i18n("Flarum forum URL")}</span>
+            <input
+                id="forumUrl"
+                class="textfield py-2 ${source.forumUrl.length == 0 ? "border-red-500" : ""}"
+                .value=${source.forumUrl}
+                @input=${() => this.handleInput()}
+            />
             <span class="self-start text-xs text-muted-fg font-semibold -mb-4 ml-2 bg-background z-[5] px-1">${i18n("Staff user names")}</span>
             <textarea id="staff" class="textfield py-2" .value=${source.staff.join("\n")} @input=${() => this.handleInput()}></textarea>
         </div>`;
@@ -344,12 +356,14 @@ export class FlarumSourceElement extends BaseSourceElement {
     handleInput() {
         if (!this.source) return;
         const apiUrl = this.querySelector<HTMLInputElement>("#apiUrl")!.value.trim();
+        const forumUrl = this.querySelector<HTMLInputElement>("#forumUrl")!.value.trim();
         const staff = this.querySelector<HTMLTextAreaElement>("#staff")
             ?.value.trim()
             .split("\n")
             .map((staff) => staff.trim())
             .filter((staff) => staff.length > 0);
         this.source.apiUrl = apiUrl.trim();
+        this.source.forumUrl = forumUrl.trim();
         this.source.staff = staff ?? [];
         this.page?.requestUpdate();
         this.requestUpdate();
@@ -357,7 +371,7 @@ export class FlarumSourceElement extends BaseSourceElement {
 
     canSave(): boolean {
         if (!this.source) return false;
-        return this.source.apiUrl.length > 0;
+        return this.source.apiUrl.length > 0 && this.source.forumUrl.length > 0;
     }
 }
 

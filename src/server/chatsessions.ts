@@ -44,7 +44,7 @@ You are the assistant. The user will give you text snippets and a question to an
 <multi-line text of user question>
 
 Perform these steps:
-1. Read the snippets and user question. Focus on the user question and think of an answer based on the previous conversation and the snippets.
+1. Read and understand the snippets and user question. Focus on the user question and think of an answer based on the previous conversation and the snippets. Resolve references like "it", "they" and so on to things mentioned in previous questions.
 2. Output an answer to the user question using the information found in the relevant snippets. Follow these rules when composing your answer:
    a. If you answer based on the text of a snippet, and the snippet url starts with http or https add a markdown link of the form \`[phrase or snippet title](snippet url)\`.
    b. Do not say "you can find more information in this snippet" or similar things referring to snippets provided to you.
@@ -234,40 +234,6 @@ ${context}
             tries--;
             answer = "";
         }
-
-        // If one or more of the contexts was used, print links
-        /*const usedContext = response.includes("---snippet");
-        if (usedContext) {
-            const extractIDs = (text: string): number[] => {
-                const regex = /---snippet-(\d+)/g;
-                let match;
-                const ids: number[] = [];
-
-                while ((match = regex.exec(text)) !== null) {
-                    ids.push(parseInt(match[1]));
-                }
-
-                return ids;
-            };
-            const ids = extractIDs(response);
-
-            if (ids.length > 0 && ids.length != 10) {
-                const seenDocs = new Set<string>();
-                let links = "";
-                for (const id of ids) {
-                    const doc = context[id];
-                    if (!doc) continue;
-                    if (seenDocs.has(doc.docUri)) continue;
-                    seenDocs.add(doc.docUri);
-                    if (doc.docUri.startsWith("http")) {
-                        links += `* [${doc.docTitle}](${doc.docUri})\n`;
-                    }
-                }
-                if (links.trim().length > 0) {
-                    chunkcb("\n\n**Links**\n" + links, "text");
-                }
-            }
-        }*/
 
         // Check if there was topic drift
         const topicDrift = response.includes("---topicdrift");

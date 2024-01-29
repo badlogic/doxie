@@ -16,7 +16,7 @@ export type FlarumPost = {
     createdAt: Number;
     detectedLang: "en" | string;
     userName: string;
-    content: String;
+    content: string;
 };
 
 export type FlarumDiscussion = {
@@ -29,6 +29,7 @@ export type FlarumDiscussion = {
 export interface FlarumSource extends BaseSource {
     type: "flarum";
     apiUrl: string;
+    forumUrl: string;
     staff: string[];
 }
 
