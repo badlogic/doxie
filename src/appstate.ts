@@ -1,8 +1,8 @@
-import { Collection, Source } from "./common/api";
+import { Bot, Source } from "./common/api";
 import { State } from "./utils/state";
 
 interface AppStateObjects {
-    collection: Collection;
+    bot: Bot;
     source: Source;
 }
 

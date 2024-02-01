@@ -4,7 +4,7 @@ import { unsafeHTML } from "lit-html/directives/unsafe-html.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { Marked } from "marked";
 import { BaseElement, dom, getScrollParent, renderError } from "../app";
-import { Api, ChatSession, Collection, CompletionDebug, ChatMessage } from "../common/api";
+import { Api, ChatSession, Bot, CompletionDebug, ChatMessage } from "../common/api";
 import { sendIcon } from "../utils/icons";
 import { router } from "../utils/routing";
 import { markedHighlight } from "marked-highlight";
@@ -272,7 +272,7 @@ export class ChatPage extends BaseElement {
     text = "";
 
     sessionId?: string;
-    collection?: Collection;
+    bot?: Bot;
     isReplay = false;
     replayMessages?: ChatMessage[];
     replayIndex = 0;
@@ -295,20 +295,24 @@ export class ChatPage extends BaseElement {
                 replaySession = session.data;
                 this.replayMessages = replaySession.rawMessages.filter((message) => message.role == "user");
             }
-            const collectionId = replaySession ? replaySession.collectionId : router.getCurrentParams()?.get("collection") ?? "";
-            const collection = await Api.getCollection("noauth", collectionId);
-            if (!collection.success) {
+            const botId = replaySession ? replaySession.botId : router.getCurrentParams()?.get("bot") ?? "";
+            const bot = await Api.getBot("noauth", botId);
+            if (!bot.success) {
                 this.addMessage({ role: "error", text: "Could not create chat session. Try again later" });
                 return;
             }
-            this.collection = collection.data;
-            const sourceId = replaySession ? replaySession.sourceId : router.getCurrentParams()?.get("source");
-            const sessionId = await Api.createSession(collectionId, sourceId);
+            this.bot = bot.data;
+            const sourceIds = replaySession
+                ? replaySession.sourceIds
+                : router.getCurrentParams()?.get("source")
+                ? [router.getCurrentParams()?.get("source")!]
+                : this.bot.sources;
+            const sessionId = await Api.createSession(botId, sourceIds);
             if (!sessionId.success) {
                 this.addMessage({ role: "error", text: "Could not create chat session. Try again later" });
                 return;
             }
-            this.addMessage({ role: "doxie", text: this.collection.botWelcome ?? "How can I assist you today?" });
+            this.addMessage({ role: "doxie", text: this.bot.botWelcome ?? "How can I assist you today?" });
             this.sessionId = sessionId.data.sessionId;
             if (this.isReplay) {
                 this.nextReplay();
@@ -330,9 +334,9 @@ export class ChatPage extends BaseElement {
         const canSend = this.text.trim().length > 0 && !this.isWaitingForResponse;
         const footer = this.isConnecting
             ? ""
-            : this.collection?.botFooter ??
+            : this.bot?.botFooter ??
               `<a href="/privacy">Privacy & Imprint</a><span>|</span><span>By <a href="https://twitter.com/badlogicgames">Mario Zechner</a>`;
-        const botCss = this.collection?.botCss;
+        const botCss = this.bot?.botCss;
 
         return html`<style>
                 ${botCss ?? ""}
@@ -370,8 +374,8 @@ export class ChatPage extends BaseElement {
             dom(
                 html`<chat-message
                     class="w-full max-w-[640px] mt-4"
-                    .botName=${this.collection?.botName ?? "Doxie"}
-                    .botIcon=${this.collection?.botIcon}
+                    .botName=${this.bot?.botName ?? "Doxie"}
+                    .botIcon=${this.bot?.botIcon}
                     .message=${message}
                 ></chat-message>`
             )[0]
@@ -433,8 +437,8 @@ export class ChatPage extends BaseElement {
                 html`<chat-gpt-reply
                     class="w-full max-w-[640px] mt-4"
                     .sessionId=${this.sessionId}
-                    .botName=${this.collection?.botName ?? "Doxie"}
-                    .botIcon=${this.collection?.botIcon}
+                    .botName=${this.bot?.botName ?? "Doxie"}
+                    .botIcon=${this.bot?.botIcon}
                     .query=${this.text}
                     .completeCb=${() => {
                         this.isWaitingForResponse = false;

@@ -7,7 +7,6 @@ export type Logger = (message: string) => Promise<void>;
 
 export interface BaseSource {
     _id?: string;
-    collectionId: string;
     name: string;
     description: string;
 }
@@ -59,8 +58,9 @@ export interface MarkdownZipSource extends BaseSource {
     file: string;
 }
 
-export interface Collection {
+export interface Bot {
     _id?: string;
+    sources: string[];
     name: string;
     description: string;
     systemPrompt: string;
@@ -130,8 +130,8 @@ export interface ChatMessage {
 
 export interface ChatSession {
     _id?: string;
-    collectionId: string;
-    sourceId?: string;
+    botId: string;
+    sourceIds: string[];
     createdAt: number;
     lastModified: number;
     messages: ChatMessage[];
@@ -221,8 +221,8 @@ export async function apiPost<T, E extends ErrorReason = ErrorReason>(
 }
 
 export class Api {
-    static async createSession(collectionId: string, sourceId?: string) {
-        return apiPost<{ sessionId: string }>("createSession", { collectionId, sourceId });
+    static async createSession(botId: string, sourceIds?: string[]) {
+        return apiPost<{ sessionId: string }>("createSession", { botId, sourceIds });
     }
 
     static deleteSession(adminToken: string, sessionId: string | undefined) {
@@ -317,24 +317,24 @@ export class Api {
         }
     }
 
-    static async getCollections(adminToken: string) {
-        return apiGet<Collection[]>("collections", adminToken);
+    static async getBots(adminToken: string) {
+        return apiGet<Bot[]>("bots", adminToken);
     }
 
-    static async getCollection(adminToken: string, id: string) {
-        return apiGet<Collection>("collections/" + encodeURIComponent(id), adminToken);
+    static async getBot(adminToken: string, id: string) {
+        return apiGet<Bot>("bots/" + encodeURIComponent(id), adminToken);
     }
 
-    static async setCollection(adminToken: string, collection: Collection) {
-        return apiPost<Collection, "Duplicate collection name">("collections", collection, adminToken);
+    static async setBot(adminToken: string, bot: Bot) {
+        return apiPost<Bot, "Duplicate bot name">("bots/", bot, adminToken);
     }
 
-    static async deleteCollection(adminToken: string, id: string) {
-        return apiDelete<void>("collections/" + encodeURIComponent(id), adminToken);
+    static async deleteBot(adminToken: string, id: string) {
+        return apiDelete<void>("bots/" + encodeURIComponent(id), adminToken);
     }
 
-    static async getSources(adminToken: string, collectionId: string) {
-        return apiGet<Source[]>("collections/" + encodeURIComponent(collectionId) + "/sources", adminToken);
+    static async getSources(adminToken: string) {
+        return apiGet<Source[]>("sources", adminToken);
     }
 
     static async getSource(adminToken: string, id: string) {
@@ -361,20 +361,16 @@ export class Api {
         return apiGet<ProcessingJob | undefined>("sources/" + encodeURIComponent(sourceId) + "/stopprocessing", adminToken);
     }
 
-    static async getDocuments(adminToken: string, collectionId: string, sourceId: string, offset: number, limit: number) {
+    static async getDocuments(adminToken: string, sourceId: string, offset: number, limit: number) {
         return apiGet<VectorDocument[]>(
-            "documents/" +
-                encodeURIComponent(collectionId) +
-                "/" +
-                encodeURIComponent(sourceId) +
-                `?offset=${encodeURIComponent(offset)}&limit=${encodeURIComponent(limit)}`,
+            "documents/" + encodeURIComponent(sourceId) + `?offset=${encodeURIComponent(offset)}&limit=${encodeURIComponent(limit)}`,
             adminToken
         );
     }
 
-    static async getChats(adminToken: string, collectionId: string, offset: number, limit: number) {
+    static async getChats(adminToken: string, botId: string, offset: number, limit: number) {
         return apiGet<ChatSession[]>(
-            "chats/" + encodeURIComponent(collectionId) + `?offset=${encodeURIComponent(offset)}&limit=${encodeURIComponent(limit)}`,
+            "chats/" + encodeURIComponent(botId) + `?offset=${encodeURIComponent(offset)}&limit=${encodeURIComponent(limit)}`,
             adminToken
         );
     }
@@ -383,15 +379,8 @@ export class Api {
         return apiGet<ChatSession>("chatsession/" + encodeURIComponent(sessionId), adminToken);
     }
 
-    static async queryDocuments(adminToken: string, collectionId: string, sourceId: string, query: string, k: number = 5) {
-        return apiGet<VectorDocument[]>(
-            "documents/" +
-                encodeURIComponent(collectionId) +
-                "/" +
-                encodeURIComponent(sourceId) +
-                `/query?query=${encodeURIComponent(query)}&k=${encodeURIComponent(k)}`,
-            adminToken
-        );
+    static async queryDocuments(adminToken: string, sourceId: string, query: string, k: number = 5) {
+        return apiPost<VectorDocument[]>("documents/" + encodeURIComponent(sourceId) + `/query`, { k, query }, adminToken);
     }
 
     static async html(url: string) {

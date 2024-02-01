@@ -21,7 +21,7 @@ export class ChatSessions {
         }
     }
 
-    async createSession(ip: string, collectionId: string, sourceId?: string) {
+    async createSession(ip: string, botId: string, sourceIds?: string[]) {
         let contextInstructions = `
 In addition to the user question, you are provided with contextual information which you should use to anser the question. The format will be:
 ---snippet <url of snippet with id 0>
@@ -63,9 +63,10 @@ Follow this output format exactly:
 <text of your 2 sentence summary of your answer>
         `.trim();
 
+        const bot = await this.database.getBot(botId);
         const session: ChatSession = {
-            collectionId,
-            sourceId,
+            botId,
+            sourceIds: sourceIds ?? bot.sources,
             createdAt: new Date().getTime(),
             lastModified: new Date().getTime(),
             debug: false,
@@ -74,12 +75,11 @@ Follow this output format exactly:
             rawMessages: [],
         };
 
-        const collection = await this.database.getCollection(collectionId);
-        const systemPrompt = collection.systemPrompt;
-        if (!systemPrompt) throw new Error("Couldn't find system prompt for collection " + collectionId);
+        const systemPrompt = bot.systemPrompt;
+        if (!systemPrompt) throw new Error("Couldn't find system prompt for bot " + botId);
         const initialMessages: ChatMessage[] = [
             { role: "system", content: systemPrompt + "\n\n" + contextInstructions },
-            { role: "assistant", content: collection.botWelcome ?? "How can I assist you today?" },
+            { role: "assistant", content: bot.botWelcome ?? "How can I assist you today?" },
         ];
         session.messages.push(...initialMessages);
         session.rawMessages.push(...initialMessages);
@@ -150,10 +150,17 @@ ${context}
         let ragQuery = message + "\n" + ((await this.expandQuery(message, ragHistory)) ?? "");
 
         // Query vector db with expanded query
-        const context = await this.vectors.query(session.collectionId, session.sourceId, ragQuery, 25);
+        let embedStart = performance.now();
+        const ragQueryVector = (await this.vectors.embedder.embed([ragQuery]))[0];
+        console.log("Embedding query took: " + ((performance.now() - embedStart) / 1000).toFixed(3) + " secs");
+        let queryStart = performance.now();
+        const vectorQueries = session.sourceIds.map((sourceId) => this.vectors.query(sourceId, ragQueryVector, 25));
+        const context = (await Promise.all(vectorQueries)).flat();
+        console.log(`Querying ${session.sourceIds.length} sources took: ` + ((performance.now() - queryStart) / 1000).toFixed(3) + " secs");
 
         // Rerank results via cohere if enabled
         const useCohere = true;
+        const k = 8;
         if (this.cohere && useCohere) {
             const start = performance.now();
             const reranked: RerankRequestDocumentsItem[] = context.map((doc) => {
@@ -161,7 +168,7 @@ ${context}
             });
             const response = await this.cohere.rerank({
                 model: `rerank-multilingual-v2.0`,
-                topN: 10,
+                topN: 8,
                 query: ragQuery,
                 returnDocuments: false,
                 documents: reranked,
@@ -174,13 +181,16 @@ ${context}
             context.push(...newContext);
             console.log("Reranking took: " + ((performance.now() - start) / 1000).toFixed(3) + " secs");
         } else {
-            context.length = 10;
+            context.length = 8;
         }
 
         // Create new user message, composed of user message and RAG context
         const contextContent =
             context
-                .map((doc, index) => "---snippet " + doc.docUri.trim() + "\n" + doc.docTitle + "\n" + `""""""\n` + doc.text + `""""""\n`)
+                .map(
+                    (doc, index) =>
+                        "---snippet " + doc.docUri.trim() + "\n" + doc.docTitle.trim() + "\n" + `""""""\n` + doc.text.trim() + `\n""""""\n`
+                )
                 .join("\n\n") + `""""""\n`;
         const messageContent = `${contextContent}\n\n---question\n${message}`;
         session.messages.push({

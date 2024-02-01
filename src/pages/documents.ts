@@ -94,7 +94,7 @@ export class DocumentsPage extends BaseElement {
                 ? new VectorDocumentStream(async (cursor?: string) => {
                       if (cursor) return { items: [] };
                       const k = parseInt(this.querySelector<HTMLInputElement>("#top")!.value);
-                      const resp = await Api.queryDocuments(Store.getAdminToken()!, this.source?.collectionId!, this.source?._id!, this.query!, k);
+                      const resp = await Api.queryDocuments(Store.getAdminToken()!, this.source?._id!, this.query!, k);
                       if (!resp.success) {
                           return { items: [] };
                       } else {
@@ -102,13 +102,7 @@ export class DocumentsPage extends BaseElement {
                       }
                   })
                 : new VectorDocumentStream(async (cursor?: string) => {
-                      const resp = await Api.getDocuments(
-                          Store.getAdminToken()!,
-                          this.source?.collectionId!,
-                          this.source?._id!,
-                          cursor ? parseInt(cursor) : 0,
-                          25
-                      );
+                      const resp = await Api.getDocuments(Store.getAdminToken()!, this.source?._id!, cursor ? parseInt(cursor) : 0, 25);
                       if (!resp.success) {
                           return { items: [] };
                       } else {
@@ -116,11 +110,13 @@ export class DocumentsPage extends BaseElement {
                       }
                   });
         const streamView = dom(html`<vector-document-stream .stream=${stream}></vector-document-stream>`)[0];
-
+        const queryUrl = `/api/documents/${this.source._id}/query`;
         return html`<div class="${pageContainerStyle}">
             ${renderTopbar(i18n("Docs"), closeButton())}
             <div class="${pageContentStyle} items-center justify-center gap-4">
                 <span>${i18n("Source")} ${this.source.name}</span>
+                <span>${i18n("Query URL")}</span>
+                <a href="${queryUrl}">${queryUrl}</a>
                 <div class="px-4 w-full flex flex-col gap-2 border-b border-divider pb-4">
                     <input
                         id="search"

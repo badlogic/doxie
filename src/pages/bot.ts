@@ -3,7 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { map } from "lit/directives/map.js";
 import { BaseElement, chatDefaultCss, closeButton, dom, downloadJson, renderError, renderTopbar, toast, uploadJson } from "../app.js";
 import { appState } from "../appstate.js";
-import { Api, ChatSession, Collection, ProcessingJob, Source, VectorDocument, apiPost } from "../common/api.js";
+import { Api, ChatSession, Bot, ProcessingJob, Source, VectorDocument, apiPost } from "../common/api.js";
 import { i18n } from "../utils/i18n.js";
 import { addIcon, deleteIcon, downloadIcon } from "../utils/icons.js";
 import { router } from "../utils/routing.js";
@@ -13,8 +13,8 @@ import { repeat } from "lit-html/directives/repeat.js";
 import { Stream } from "../utils/streams.js";
 import { StreamView } from "../utils/streamviews.js";
 
-@customElement("collection-page")
-export class CollectionPage extends BaseElement {
+@customElement("bot-page")
+export class BotPage extends BaseElement {
     @state()
     isLoading = true;
 
@@ -22,13 +22,10 @@ export class CollectionPage extends BaseElement {
     error?: string;
 
     @state()
-    collection: Collection = { name: "", description: "", systemPrompt: "You are a helpful assistant", botName: "Doxie" };
+    bot: Bot = { name: "", description: "", systemPrompt: "You are a helpful assistant", botName: "Doxie", sources: [] };
 
     @state()
-    sources: Source[] = [];
-
-    @state()
-    jobs: Map<string, ProcessingJob> = new Map();
+    sources?: Source[];
 
     isNew = false;
 
@@ -56,61 +53,30 @@ export class CollectionPage extends BaseElement {
     async getData(adminToken: string, id: string) {
         this.isLoading = true;
         try {
-            const collections = await Api.getCollection(adminToken, id);
-            if (!collections.success) {
-                this.error = i18n("Could not load collection");
-                return;
+            const bot = await Api.getBot(adminToken, id);
+            if (!bot.success) {
+                this.error = i18n("Could not load bot");
             } else {
-                this.collection = collections.data;
+                this.bot = bot.data;
             }
-            const sources = await Api.getSources(adminToken, id);
+            const sources = await Api.getSources(adminToken);
             if (!sources.success) {
-                this.error = i18n("Could not load collection");
-                return;
+                this.error = i18n("Could not load sources");
             } else {
                 this.sources = sources.data;
             }
-            await this.getJobs(adminToken);
         } catch (e) {
             console.error(e);
-            this.error = i18n("Could not load collection");
+            this.error = i18n("Could not load bot");
         } finally {
             this.isLoading = false;
-        }
-    }
-
-    timeoutId: any = -1;
-    connectedCallback(): void {
-        super.connectedCallback();
-        const updateJobs = () => {
-            this.getJobs(Store.getAdminToken()!);
-            this.timeoutId = setTimeout(updateJobs, 2000);
-        };
-        updateJobs();
-    }
-
-    disconnectedCallback(): void {
-        super.disconnectedCallback();
-        clearTimeout(this.timeoutId);
-    }
-
-    async getJobs(adminToken: string) {
-        if (!adminToken) return;
-        for (const source of this.sources) {
-            const jobs = await Api.getJob(adminToken, source._id!);
-            if (!jobs.success) {
-                this.error = i18n("Could not load collection");
-            } else {
-                if (jobs.data) this.jobs.set(source._id!, jobs.data);
-            }
-            this.requestUpdate();
         }
     }
 
     render() {
         if (this.isLoading) {
             return html`<div class="${pageContainerStyle}">
-                ${renderTopbar(i18n("Collection"), closeButton())}
+                ${renderTopbar(i18n("Bot"), closeButton())}
                 <div class="${pageContentStyle} px-4 items-center justify-center gap-4">
                     <span>${i18n("Loading ...")}</span>
                     <loading-spinner></loading-spinner>
@@ -120,58 +86,49 @@ export class CollectionPage extends BaseElement {
 
         if (this.error) {
             return html`<div class="${pageContainerStyle}">
-                ${renderTopbar(i18n("Collection"), closeButton())}
+                ${renderTopbar(i18n("Bot"), closeButton())}
                 <div class="${pageContentStyle} px-4 items-center justify-center gap-4">
                     <div class="w-full max-w-[320px]">${this.error ? renderError(this.error) : nothing}</div>
                 </div>
             </div>`;
         }
-        const collection = this.collection;
-        const sources = this.sources;
+        const bot = this.bot;
+        const botSources = new Set<string>(bot.sources);
+        const sources = this.sources?.filter((source) => botSources.has(source._id!)) ?? [];
+        const availableSources = this.sources?.filter((source) => !botSources.has(source._id!)) ?? [];
         const topBar = renderTopbar(
-            i18n("Collection"),
+            i18n("Bot"),
             closeButton(),
-            html`<button id="save" class="ml-auto button" ?disabled=${!this.canSave(collection)} @click=${() => this.save()}>${i18n("Save")}</button>`
+            html`<button id="save" class="ml-auto button" ?disabled=${!this.canSave(bot)} @click=${() => this.save()}>${i18n("Save")}</button>`
         );
         return html`<div class="${pageContainerStyle}">
             ${topBar}
             <div class="${pageContentStyle} px-4 gap-4">
-                <a href="/chat/${collection._id!}" class="button self-start">${i18n("Chat")}</a>
+                <a href="/chat/${bot._id!}" class="button self-start">${i18n("Chat")}</a>
+                ${this.bot._id ? html`<span><strong>Id:</strong> ${this.bot._id}</span>` : nothing}
                 <span class="self-start text-xs text-muted-fg font-semibold -mb-6 ml-2 bg-background z-[5] px-1">${i18n("Name")}</span>
                 <input
                     id="name"
-                    class="textfield pt-2 ${collection.name.length == 0 ? "border-red-500" : ""}"
-                    .value=${collection.name}
+                    class="textfield pt-2 ${bot.name.length == 0 ? "border-red-500" : ""}"
+                    .value=${bot.name}
                     @input=${() => this.handleInput()}
                 />
                 <span class="self-start text-xs text-muted-fg font-semibold -mb-6 ml-2 bg-background z-[5] px-1">${i18n("Description")}</span>
-                <textarea
-                    id="description"
-                    class="textfield py-3"
-                    .value=${collection.description}
-                    rows="5"
-                    @input=${() => this.handleInput()}
-                ></textarea>
+                <textarea id="description" class="textfield py-3" .value=${bot.description} rows="5" @input=${() => this.handleInput()}></textarea>
                 <span class="self-start text-xs text-muted-fg font-semibold -mb-6 ml-2 bg-background z-[5] px-1">${i18n("System prompt")}</span>
-                <textarea
-                    id="systemPrompt"
-                    class="textfield py-3"
-                    .value=${collection.systemPrompt}
-                    rows="5"
-                    @input=${() => this.handleInput()}
-                ></textarea>
+                <textarea id="systemPrompt" class="textfield py-3" .value=${bot.systemPrompt} rows="5" @input=${() => this.handleInput()}></textarea>
                 <span class="self-start text-xs text-muted-fg font-semibold -mb-6 ml-2 bg-background z-[5] px-1">${i18n("Chatbot name")}</span>
                 <input
                     id="botName"
-                    class="textfield pt-2 ${collection.name.length == 0 ? "border-red-500" : ""}"
-                    .value=${collection.botName ?? "Doxie"}
+                    class="textfield pt-2 ${bot.name.length == 0 ? "border-red-500" : ""}"
+                    .value=${bot.botName ?? "Doxie"}
                     @input=${() => this.handleInput()}
                 />
                 <span class="self-start text-xs text-muted-fg font-semibold bg-background z-[5] px-1">${i18n("Chatbot icon (128x128)")}</span>
-                ${this.collection.botIcon
+                ${this.bot.botIcon
                     ? html` <img
                           class="h-12 w-12 border border-divider rounded-full cursor-pointer"
-                          src="/files/${this.collection.botIcon}"
+                          src="/files/${this.bot.botIcon}"
                           @click=${() => this.uploadImage()}
                       />`
                     : html`<div
@@ -179,7 +136,7 @@ export class CollectionPage extends BaseElement {
                           style="background-color: #ab68ff;"
                           @click=${() => this.uploadImage()}
                       >
-                          <span>${(this.collection.botName ?? "Doxie").charAt(0).toUpperCase()}</span>
+                          <span>${(this.bot.botName ?? "Doxie").charAt(0).toUpperCase()}</span>
                       </div>`}
                 <span class="self-start text-xs text-muted-fg font-semibold -mb-6 ml-2 bg-background z-[5] px-1"
                     >${i18n("Chatbot welcome message")}</span
@@ -187,25 +144,19 @@ export class CollectionPage extends BaseElement {
                 <textarea
                     id="botWelcome"
                     class="textfield py-3"
-                    .value=${collection.botWelcome ?? "How can I assist you today?"}
+                    .value=${bot.botWelcome ?? "How can I assist you today?"}
                     rows="3"
                     @input=${() => this.handleInput()}
                 ></textarea>
                 <span class="self-start text-xs text-muted-fg font-semibold -mb-6 ml-2 bg-background z-[5] px-1"
                     >${i18n("Chatbot footer (HTML)")}</span
                 >
-                <textarea
-                    id="botFooter"
-                    class="textfield py-3"
-                    .value=${collection.botFooter ?? ""}
-                    rows="3"
-                    @input=${() => this.handleInput()}
-                ></textarea>
+                <textarea id="botFooter" class="textfield py-3" .value=${bot.botFooter ?? ""} rows="3" @input=${() => this.handleInput()}></textarea>
                 <span class="self-start text-xs text-muted-fg font-semibold -mb-6 ml-2 bg-background z-[5] px-1">${i18n("Chatbot CSS")}</span>
                 <textarea
                     id="botCss"
                     class="textfield py-3"
-                    .value=${collection.botCss ?? chatDefaultCss.trim()}
+                    .value=${bot.botCss ?? chatDefaultCss.trim()}
                     rows="10"
                     @keydown=${(ev: KeyboardEvent) => this.handleTab(ev)}
                     @input=${() => this.handleInput()}
@@ -213,22 +164,16 @@ export class CollectionPage extends BaseElement {
                 ${!this.isNew
                     ? html` <div class="flex items-center mt-4 items-center gap-2">
                               <h2>${i18n("Sources")}</h2>
-                              <button class="ml-auto hover:text-primary flex items-center gap-1" @click=${(ev: Event) => this.import(ev)}>
-                                  <i class="icon w-5 h-5">${downloadIcon}</i><span>${i18n("Import")}</span>
-                              </button>
                               <dropdown-button
                                   button
-                                  class=""
+                                  class="ml-auto"
                                   .content=${html`<div class="flex items-center hover:text-primary gap-1">
-                                      <i class="icon w-5 h-5">${addIcon}</i><span>${i18n("New")}</span>
+                                      <i class="icon w-5 h-5">${addIcon}</i><span>${i18n("Add")}</span>
                                   </div>`}
-                                  .values=${[
-                                      { label: "FAQ", value: "faq" },
-                                      { label: "Sitemap", value: "sitemap" },
-                                      { label: "Markdown ZIP", value: "markdownzip" },
-                                      { label: "Flarum dump", value: "flarum" },
-                                  ]}
-                                  .onSelected=${(sourceType: { value: string; label: string }) => this.addSource(sourceType)}
+                                  .values=${availableSources.map((source) => {
+                                      return { label: source.name, value: source };
+                                  })}
+                                  .onSelected=${(source: { value: Source; label: string }) => this.addSource(source)}
                               >
                               </dropdown-button>
                           </div>
@@ -243,12 +188,7 @@ export class CollectionPage extends BaseElement {
                                           <div class="flex p-4 pb-0 gap-2">
                                               <span class="rounded-md px-1 border border-green-600 font-semibold">${source.type}</span>
                                               <span class="font-semibold">${source.name}</span>
-                                              <button
-                                                  class="ml-auto hover:text-primary flex items-center gap-1"
-                                                  @click=${(ev: Event) => this.export(ev, source)}
-                                              >
-                                                  <i class="icon w-5 h-5">${downloadIcon}</i><span>${i18n("Export")}</span>
-                                              </button>
+                                              <span class="font-semibold">Id: ${source._id}</span>
                                               <button
                                                   class="hover:text-primary w-6 h-6 flex items-center justify-center"
                                                   @click=${(ev: Event) => this.deleteSource(ev, source)}
@@ -265,8 +205,8 @@ export class CollectionPage extends BaseElement {
                               )}
                           </div>
                           <div class="flex flex-col items-center gap-2">
-                              <h2 class="self-start">${i18n("User questions")}</h2>
-                              <chat-sessions class="w-full" .collectionId=${this.collection._id}></chat-sessions>
+                              <h2 class="self-start">${i18n("Chat sessions")}</h2>
+                              <chat-sessions class="w-full" .collectionId=${this.bot._id}></chat-sessions>
                           </div>`
                     : nothing}
             </div>
@@ -294,15 +234,15 @@ export class CollectionPage extends BaseElement {
         const botFooter = this.querySelector<HTMLTextAreaElement>("#botFooter")!.value.trim();
         const botCss = this.querySelector<HTMLTextAreaElement>("#botCss")!.value.trim();
 
-        const collection = this.collection;
-        collection.name = name;
-        collection.description = description;
-        collection.systemPrompt = systemPrompt;
-        collection.botName = botName;
-        collection.botWelcome = botWelcome;
-        collection.botFooter = botFooter;
-        collection.botCss = botCss;
-        this.collection = { ...collection };
+        const bot = this.bot;
+        bot.name = name;
+        bot.description = description;
+        bot.systemPrompt = systemPrompt;
+        bot.botName = botName;
+        bot.botWelcome = botWelcome;
+        bot.botFooter = botFooter;
+        bot.botCss = botCss;
+        this.bot = { ...bot };
         this.requestUpdate();
     }
 
@@ -328,7 +268,7 @@ export class CollectionPage extends BaseElement {
             try {
                 const response = await apiPost<string>("upload", formData, Store.getAdminToken()!);
                 if (response.success) {
-                    this.collection.botIcon = response.data;
+                    this.bot.botIcon = response.data;
                     this.requestUpdate();
                 } else {
                     this.error = i18n("Could not upload icon");
@@ -342,186 +282,39 @@ export class CollectionPage extends BaseElement {
         input.click();
     }
 
-    canSave(collection?: Collection) {
-        if (!collection) return false;
-        return collection.name.trim().length >= 3;
+    canSave(bot?: Bot) {
+        if (!bot) return false;
+        return bot.name.trim().length >= 3;
     }
 
-    addSource(sourceType: { label: string; value: string }) {
-        router.push(`/sources/${this.collection._id}/${sourceType.value}`);
+    addSource(source: { label: string; value: Source }) {
+        this.bot.sources.push(source.value._id!);
+        this.requestUpdate();
     }
 
     async deleteSource(ev: Event, source: Source) {
         ev.preventDefault();
         ev.stopPropagation();
-        if (!confirm(i18n("Are you sure you want to delete source")(source.name))) {
-            return;
-        }
-        const result = await Api.deleteSource(Store.getAdminToken()!, source._id!);
-        if (!result.success) {
-            this.error = i18n("Could not delete source ")(source.name);
-        } else {
-            this.sources = this.sources?.filter((other) => other._id != source._id);
-        }
+        this.bot.sources = this.bot.sources.filter((src) => src != source._id);
         this.requestUpdate();
     }
 
     async save() {
-        const result = await Api.setCollection(Store.getAdminToken()!, this.collection);
+        const result = await Api.setBot(Store.getAdminToken()!, this.bot);
         if (!result.success) {
-            if (result.error == "Duplicate collection name") {
-                this.error = i18n("Collection with this name already exists");
+            if (result.error == "Duplicate bot name") {
+                this.error = i18n("Bot with this name already exists");
             } else {
-                this.error = i18n("Could not save collection");
+                this.error = i18n("Could not save bot");
                 this.requestUpdate();
             }
         } else {
-            this.collection = result.data;
-            appState.update("collection", this.collection, this.collection._id);
+            this.bot = result.data;
+            appState.update("bot", this.bot, this.bot._id);
             if (this.isNew) {
-                router.replace("/collections/" + this.collection._id);
+                router.replace("/bots/" + this.bot._id);
             }
         }
-    }
-
-    export(ev: Event, source: Source) {
-        ev.preventDefault();
-        ev.stopPropagation();
-        source = { ...source };
-        source._id = undefined;
-        source.collectionId = "";
-        downloadJson(source, source.name);
-    }
-
-    import(ev: Event) {
-        ev.preventDefault();
-        ev.stopPropagation();
-        uploadJson(async (source: Source) => {
-            source.collectionId = this.collection._id!;
-            const result = await Api.setSource(Store.getAdminToken()!, source);
-            if (!result.success) {
-                toast("Could not import source");
-            } else {
-                this.sources.unshift(result.data);
-                this.requestUpdate();
-            }
-        });
-    }
-}
-
-@customElement("source-panel")
-export class SourcePanel extends BaseElement {
-    @property()
-    source?: Source;
-
-    @state()
-    error?: string;
-
-    @state()
-    job?: ProcessingJob;
-
-    timeoutId: any = -1;
-    connectedCallback(): void {
-        super.connectedCallback();
-        const updateJob = async () => {
-            await this.getJob(Store.getAdminToken()!);
-            this.timeoutId = setTimeout(updateJob, 1000);
-        };
-        updateJob();
-    }
-
-    disconnectedCallback(): void {
-        super.disconnectedCallback();
-        clearTimeout(this.timeoutId);
-    }
-
-    async getJob(adminToken: string) {
-        if (!adminToken) return;
-        if (!this.source) return;
-        const jobs = await Api.getJob(adminToken, this.source._id!);
-        if (!jobs.success) {
-            this.error = i18n("Could not load job");
-        } else {
-            if (jobs.data) this.job = jobs.data;
-        }
-        this.requestUpdate();
-    }
-
-    render() {
-        const source = this.source;
-        if (!source) return renderError("Source not defined");
-
-        if (this.job) {
-            const job = this.job;
-            const toggleLogs = (ev: Event) => {
-                ev.preventDefault();
-                ev.stopPropagation();
-                const target = ev.target as HTMLElement;
-                target.parentElement?.parentElement?.querySelector<HTMLDivElement>("#logs")?.classList.toggle("hidden");
-            };
-
-            let status = "";
-            let color = "";
-            let action = i18n("Process");
-            let stop = false;
-            switch (job.state) {
-                case "running":
-                    status = i18n("Processing");
-                    color = "text-green-400";
-                    action = i18n("Stop");
-                    stop = true;
-                    break;
-                case "waiting":
-                    status = i18n("Waiting for processing");
-                    color = "text-yellow-400";
-                    action = i18n("Stop");
-                    stop = true;
-                    break;
-                case "succeeded":
-                    status = i18n("Processing succeeded")(job.finishedAt, job.startedAt);
-                    color = "text-green-400";
-                    break;
-                case "failed":
-                    status = i18n("Processing failed")(job.finishedAt);
-                    color = "text-red-400";
-                    break;
-                case "stopped":
-                    status = i18n("Processing stopped by user")(job.finishedAt);
-            }
-
-            return html`<div class="flex flex-col gap-2">
-                ${this.error ? renderError(this.error) : nothing}
-                <span class="${color} font-semibold text-sm">${status}</span>
-                <div class="flex gap-2 items-center">
-                    <button class="self-start button" @click=${(ev: Event) => this.process(ev, stop)}>${action}</button>
-                    <button class="self-start button" @click=${toggleLogs}>${i18n("Logs")}</button>
-                    <a href="/documents/${source._id}" class="self-start button">${i18n("Docs")}</a>
-                    <a href="/chat/${source.collectionId}/${source._id}" class="self-start button">${i18n("Chat")}</a>
-                </div>
-                <div id="logs" class="hidden debug hljs p-4 whitespace-pre-wrap min-h-80 max-h-80">${job.log}</div>
-            </div>`;
-        } else {
-            return html`<div class="flex flex-col gap-2">
-                ${this.error ? renderError(this.error) : nothing}
-                <button class="self-start button" @click=${(ev: Event) => this.process(ev, false)}>${i18n("Process")}</button>
-            </div>`;
-        }
-    }
-
-    async process(ev: Event, stop: boolean) {
-        ev.preventDefault();
-        ev.stopPropagation();
-        const source = this.source;
-        if (!source) return;
-        const job = stop
-            ? await Api.stopProcessingSource(Store.getAdminToken()!, source._id!)
-            : await Api.processSource(Store.getAdminToken()!, source._id!);
-        if (!job.success) {
-            alert("Could not start processing");
-            return;
-        }
-        this.job = job.data;
-        this.requestUpdate();
     }
 }
 

@@ -8,7 +8,7 @@ import path from "path";
 import * as http from "http";
 import multer from "multer";
 import WebSocket, { WebSocketServer } from "ws";
-import { Collection, ProcessingJob, Source } from "../common/api";
+import { Bot, ProcessingJob, Source } from "../common/api";
 import { ErrorReason } from "../common/errors";
 import { ChatSessions } from "./chatsessions";
 import { Database, VectorStore } from "./database";
@@ -93,31 +93,31 @@ function logError(endpoint: string, message: string, e: any) {
         }
     });
 
-    app.get("/api/collections", [header("authorization").notEmpty().isString()], async (req: Request, res: Response) => {
+    app.get("/api/bots", [header("authorization").notEmpty().isString()], async (req: Request, res: Response) => {
         const errors = validationResult(req);
         if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
         try {
             const token = req.headers.authorization!;
             if (token == "noauth") {
-                apiSuccess<Collection[]>(
+                apiSuccess<Bot[]>(
                     res,
-                    (await database.getCollections()).map((collection) => {
-                        return { ...collection, systemPrompt: "" };
+                    (await database.getBots()).map((bot) => {
+                        return { ...bot, systemPrompt: "" };
                     })
                 );
                 return;
             }
 
             if (token != adminToken) throw new Error("Invalid admin token");
-            apiSuccess<Collection[]>(res, await database.getCollections());
+            apiSuccess<Bot[]>(res, await database.getBots());
         } catch (e) {
-            logError(req.path, "Could not get collections", e);
-            apiError(res, "Could get collections");
+            logError(req.path, "Could not get bots", e);
+            apiError(res, "Could not get bots");
         }
     });
 
     app.get(
-        "/api/collections/:id",
+        "/api/bots/:id",
         [header("authorization").notEmpty().isString(), param("id").notEmpty().isString()],
         async (req: Request, res: Response) => {
             const errors = validationResult(req);
@@ -126,15 +126,15 @@ function logError(endpoint: string, message: string, e: any) {
                 const token = req.headers.authorization!;
                 const id = req.params.id as string;
                 if (token == "noauth") {
-                    const collection = await database.getCollection(id);
-                    collection.systemPrompt = "";
-                    apiSuccess<Collection>(res, collection);
+                    const bot = await database.getBot(id);
+                    bot.systemPrompt = "";
+                    apiSuccess<Bot>(res, bot);
                     return;
                 }
                 if (token != adminToken) throw new Error("Invalid admin token");
-                apiSuccess<Collection>(res, await database.getCollection(id));
+                apiSuccess<Bot>(res, await database.getBot(id));
             } catch (e) {
-                const error = "Could not get collection " + req.query.id;
+                const error = "Could not get bot " + req.query.id;
                 logError(req.path, error, e);
                 apiError(res, error);
             }
@@ -142,7 +142,7 @@ function logError(endpoint: string, message: string, e: any) {
     );
 
     app.delete(
-        "/api/collections/:id",
+        "/api/bots/:id",
         [header("authorization").notEmpty().isString(), param("id").notEmpty().isString()],
         async (req: Request, res: Response) => {
             const errors = validationResult(req);
@@ -151,48 +151,44 @@ function logError(endpoint: string, message: string, e: any) {
                 const token = req.headers.authorization!;
                 if (token != adminToken) throw new Error("Invalid admin token");
                 const id = req.params.id as string;
-                await database.deleteCollection(id);
+                await database.deleteBot(id);
                 apiSuccess(res);
             } catch (e) {
-                const error = "Could not delete collection " + req.query.id;
+                const error = "Could not delete bot " + req.query.id;
                 logError(req.path, error, e);
                 apiError(res, error);
             }
         }
     );
 
-    app.post("/api/collections", [header("authorization").notEmpty().isString()], async (req: Request, res: Response) => {
+    app.post("/api/bots", [header("authorization").notEmpty().isString()], async (req: Request, res: Response) => {
         const errors = validationResult(req);
         if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
         try {
             const token = req.headers.authorization!;
             if (token != adminToken) throw new Error("Invalid admin token");
-            const collection = req.body as Collection;
-            apiSuccess<Collection>(res, await database.setCollection(collection));
+            const bot = req.body as Bot;
+            apiSuccess<Bot>(res, await database.setBot(bot));
         } catch (e) {
-            const error = "Could not update collection " + req.body._id;
+            const error = "Could not update bot " + req.body._id;
             logError(req.path, error, e);
             apiError(res, error);
         }
     });
 
-    app.get(
-        "/api/collections/:id/sources",
-        [header("authorization").notEmpty().isString(), param("id").notEmpty().isString()],
-        async (req: Request, res: Response) => {
-            const errors = validationResult(req);
-            if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
-            try {
-                const token = req.headers.authorization!;
-                if (token != adminToken) throw new Error("Invalid admin token");
-                apiSuccess<Source[]>(res, await database.getSources(req.params.id));
-            } catch (e) {
-                const error = "Could not get sources of collection " + req.params.id;
-                logError(req.path, error, e);
-                apiError(res, error);
-            }
+    app.get("/api/sources", [header("authorization").notEmpty().isString()], async (req: Request, res: Response) => {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
+        try {
+            const token = req.headers.authorization!;
+            if (token != adminToken) throw new Error("Invalid admin token");
+            apiSuccess<Source[]>(res, await database.getSources());
+        } catch (e) {
+            const error = "Could not get sources";
+            logError(req.path, error, e);
+            apiError(res, error);
         }
-    );
+    });
 
     app.get(
         "/api/sources/:id",
@@ -226,7 +222,7 @@ function logError(endpoint: string, message: string, e: any) {
                 await database.deleteSource(id);
                 apiSuccess(res);
             } catch (e) {
-                const error = "Could not delete collection " + req.query.id;
+                const error = "Could not delete source " + req.query.id;
                 logError(req.path, error, e);
                 apiError(res, error);
             }
@@ -301,19 +297,18 @@ function logError(endpoint: string, message: string, e: any) {
     );
 
     app.get(
-        "/api/documents/:collectionId/:sourceId",
-        [header("authorization").notEmpty().isString(), param("collectionId").notEmpty().isString(), param("sourceId").notEmpty().isString()],
+        "/api/documents/:sourceId",
+        [header("authorization").notEmpty().isString(), param("sourceId").notEmpty().isString()],
         async (req: Request, res: Response) => {
             const errors = validationResult(req);
             if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
             try {
                 const token = req.headers.authorization!;
                 if (token != adminToken) throw new Error("Invalid admin token");
-                const collectionId = req.params.collectionId as string;
                 const sourceId = req.params.sourceId as string;
                 const offset = parseInt((req.query.offset as string) ?? "0");
                 const limit = parseInt((req.query.limit as string) ?? "25");
-                const response = await vectors.getDocuments(collectionId, sourceId, offset, limit);
+                const response = await vectors.getDocuments(sourceId, offset, limit);
                 apiSuccess(res, response);
             } catch (e) {
                 const error = "Could not get documents of source " + req.params.sourceId;
@@ -323,45 +318,40 @@ function logError(endpoint: string, message: string, e: any) {
         }
     );
 
-    app.get(
-        "/api/documents/:collectionId/:sourceId/query",
-        [header("authorization").notEmpty().isString(), param("collectionId").notEmpty().isString(), param("sourceId").notEmpty().isString()],
-        async (req: Request, res: Response) => {
-            const errors = validationResult(req);
-            if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
-            try {
-                const token = req.headers.authorization!;
-                if (token != adminToken) throw new Error("Invalid admin token");
-                const collectionId = req.params.collectionId as string;
-                const sourceId = req.params.sourceId as string;
-                const query = req.query.query as string;
-                const k = parseInt(req.query.k as string);
-                const response = await vectors.query(collectionId, sourceId, query, k);
-                apiSuccess(res, response);
-            } catch (e) {
-                const error = "Could not get documents of source " + req.params.sourceId;
-                logError(req.path, error, e);
-                apiError(res, error);
-            }
+    app.post("/api/documents/:sourceId/query", [param("sourceId").notEmpty().isString()], async (req: Request, res: Response) => {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
+        try {
+            const sourceId = req.params.sourceId as string;
+            const body = req.body;
+            const query = body.query as string;
+            const k = parseInt(body.k as string);
+            const queryVector = (await vectors.embedder.embed([query]))[0];
+            const response = await vectors.query(sourceId, queryVector, k);
+            apiSuccess(res, response);
+        } catch (e) {
+            const error = "Could not get documents of source " + req.params.sourceId;
+            logError(req.path, error, e);
+            apiError(res, error);
         }
-    );
+    });
 
     app.get(
-        "/api/chats/:collectionId",
-        [header("authorization").notEmpty().isString(), param("collectionId").notEmpty().isString()],
+        "/api/chats/:botId",
+        [header("authorization").notEmpty().isString(), param("botId").notEmpty().isString()],
         async (req: Request, res: Response) => {
             const errors = validationResult(req);
             if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
             try {
                 const token = req.headers.authorization!;
                 if (token != adminToken) throw new Error("Invalid admin token");
-                const collectionId = req.params.collectionId as string;
+                const botId = req.params.botId as string;
                 const offset = parseInt((req.query.offset as string) ?? "0");
                 const limit = parseInt((req.query.limit as string) ?? "25");
-                const response = await database.getChats(collectionId, offset, limit);
+                const response = await database.getChats(botId, offset, limit);
                 apiSuccess(res, response);
             } catch (e) {
-                const error = "Could not get chats of collection " + req.params.collectionId;
+                const error = "Could not get chats of bot " + req.params.botId;
                 logError(req.path, error, e);
                 apiError(res, error);
             }
@@ -388,13 +378,13 @@ function logError(endpoint: string, message: string, e: any) {
         }
     );
 
-    app.post("/api/createSession", [body("collectionId").notEmpty().isString()], async (req: Request, res: Response) => {
+    app.post("/api/createSession", [body("botId").notEmpty().isString()], async (req: Request, res: Response) => {
         const errors = validationResult(req);
         if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
         try {
-            const collectionId = req.body.collectionId;
-            const sourceId = req.body.sourceId;
-            const sessionId = await sessions.createSession(req.ip ?? "", collectionId, sourceId);
+            const botId = req.body.botId;
+            const sourceIds = req.body.sourceIds;
+            const sessionId = await sessions.createSession(req.ip ?? "", botId, sourceIds);
             apiSuccess(res, { sessionId });
         } catch (e) {
             logError(req.path, "Couldn't create session", e);

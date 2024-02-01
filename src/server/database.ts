@@ -1,11 +1,11 @@
 import { Document, MongoClient, Collection as MongoCollection, ObjectId } from "mongodb";
-import { ChatSession, Collection, ProcessingJob, Source, VectorDocument, VectorMetadata } from "../common/api";
+import { ChatSession, Bot, ProcessingJob, Source, VectorDocument, VectorMetadata } from "../common/api";
 import { ChromaClient, IncludeEnum } from "chromadb";
 import { Embedder } from "./embedder";
 
 export class Database {
     static client?: MongoClient;
-    static collections?: MongoCollection<Document>;
+    static bots?: MongoCollection<Document>;
     static sources?: MongoCollection<Document>;
     static documents?: MongoCollection<Document>;
     static jobs?: MongoCollection<Document>;
@@ -21,7 +21,7 @@ export class Database {
                 this.client = new MongoClient(`mongodb://${user}:${password}@mongodb:27017`);
                 await this.client.connect();
                 const db = await this.client.db("doxie");
-                this.collections = db.collection("collections");
+                this.bots = db.collection("bots");
                 this.sources = db.collection("sources");
                 this.documents = db.collection("documents");
                 this.jobs = db.collection("jobs");
@@ -39,55 +39,50 @@ export class Database {
         console.log("Connected to MongoDB");
     }
 
-    async getCollections(): Promise<Collection[]> {
-        const collections = Database.collections;
-        if (!collections) throw new Error("Not connected");
-        const cursor = await collections.find<Collection>({});
-        const result: Collection[] = [];
-        for await (const doc of cursor) {
-            result.push(doc);
-        }
-        return result;
+    async getBots(): Promise<Bot[]> {
+        const bots = Database.bots;
+        if (!bots) throw new Error("Not connected");
+        return await bots.find<Bot>({}).toArray();
     }
 
-    async getCollection(id: string): Promise<Collection> {
-        const collections = Database.collections;
-        if (!collections) throw new Error("Not connected");
-        const result = await collections.findOne<Collection>({ _id: new ObjectId(id) });
-        if (!result) throw new Error("Collection with id " + id + " does not exist");
+    async getBot(id: string): Promise<Bot> {
+        const bots = Database.bots;
+        if (!bots) throw new Error("Not connected");
+        const result = await bots.findOne<Bot>({ _id: new ObjectId(id) });
+        if (!result) throw new Error("Bot with id " + id + " does not exist");
         result._id = (result as any)._id?.toHexString();
         return result;
     }
 
-    async deleteCollection(id: string): Promise<void> {
-        const collections = Database.collections;
-        if (!collections) throw new Error("Not connected");
-        const result = await collections.deleteOne({ _id: new ObjectId(id) });
-        if (!result) throw new Error("Collection with id " + id + " does not exist");
+    async deleteBot(id: string): Promise<void> {
+        const bots = Database.bots;
+        if (!bots) throw new Error("Not connected");
+        const result = await bots.deleteOne({ _id: new ObjectId(id) });
+        if (!result) throw new Error("Bot with id " + id + " does not exist");
     }
 
-    async setCollection(collection: Collection): Promise<Collection> {
-        const collections = Database.collections;
-        if (!collections) throw new Error("Not connected");
+    async setBot(bot: Bot): Promise<Bot> {
+        const bots = Database.bots;
+        if (!bots) throw new Error("Not connected");
 
-        if (collection._id && ObjectId.isValid(collection._id)) {
-            (collection as any)._id = new ObjectId(collection._id);
+        if (bot._id && ObjectId.isValid(bot._id)) {
+            (bot as any)._id = new ObjectId(bot._id);
         }
 
-        if (!collection._id) {
-            const result = await collections.insertOne(collection as any);
-            collection._id = result.insertedId.toHexString();
+        if (!bot._id) {
+            const result = await bots.insertOne(bot as any);
+            bot._id = result.insertedId.toHexString();
         } else {
-            await collections.updateOne({ _id: new ObjectId(collection._id) }, { $set: collection });
+            await bots.updateOne({ _id: new ObjectId(bot._id) }, { $set: bot });
         }
 
-        return collection;
+        return bot;
     }
 
-    async getSources(collectionId: string): Promise<Source[]> {
+    async getSources(): Promise<Source[]> {
         const sources = Database.sources;
         if (!sources) throw new Error("Not connected");
-        const result = await sources.find<Source>({ collectionId }).toArray();
+        const result = await sources.find<Source>({}).toArray();
         return result;
     }
 
@@ -125,10 +120,10 @@ export class Database {
         return source;
     }
 
-    async getChats(collectionId: string, offset: number, limit = 25): Promise<ChatSession[]> {
+    async getChats(botId: string, offset: number, limit = 25): Promise<ChatSession[]> {
         const chats = Database.chats;
         if (!chats) throw new Error("Not connected");
-        const result = await chats.find<ChatSession>({ collectionId }).sort({ lastModified: -1 }).skip(offset).limit(limit).toArray();
+        const result = await chats.find<ChatSession>({ botId }).sort({ lastModified: -1 }).skip(offset).limit(limit).toArray();
         return result;
     }
 
@@ -216,9 +211,9 @@ export class VectorStore {
         this.embedder = new Embedder(openaiKey, async (message: string) => console.log(message));
     }
 
-    async getDocuments(collectionId: string, sourceId: string, offset: number, limit: number) {
-        const collection = await this.chroma.getCollection({ name: collectionId });
-        const response = await collection.get({ where: { sourceId }, offset, limit, include: ["metadatas", "documents"] as IncludeEnum[] });
+    async getDocuments(sourceId: string, offset: number, limit: number) {
+        const collection = await this.chroma.getCollection({ name: sourceId });
+        const response = await collection.get({ offset, limit, include: ["metadatas", "documents"] as IncludeEnum[] });
         const vectorDocs: VectorDocument[] = [];
         for (let i = 0; i < response.ids.length; i++) {
             const vectorDoc: VectorDocument = { ...(response.metadatas[i] as unknown as VectorMetadata), text: response.documents[i]! };
@@ -227,13 +222,8 @@ export class VectorStore {
         return vectorDocs;
     }
 
-    async query(collectionId: string, sourceId: string | undefined, query: string, k: number = 10) {
-        let start = performance.now();
-        const queryVector = (await this.embedder.embed([query]))[0];
-        console.log("Embedding query took: " + ((performance.now() - start) / 1000).toFixed(3) + " secs");
-
-        start = performance.now();
-        const collection = await this.chroma.getCollection({ name: collectionId });
+    async query(sourceId: string, queryVector: number[], k: number = 10) {
+        const collection = await this.chroma.getCollection({ name: sourceId });
         const queryConfig: any = {
             queryEmbeddings: [queryVector],
             nResults: k,
@@ -248,7 +238,6 @@ export class VectorStore {
             const vectorDoc: VectorDocument = { ...(response.metadatas[0][i] as unknown as VectorMetadata), text: response.documents[0][i]! };
             vectorDocs.push(vectorDoc);
         }
-        console.log("Querying took: " + ((performance.now() - start) / 1000).toFixed(3) + " secs");
         return vectorDocs;
     }
 }

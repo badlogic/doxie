@@ -491,7 +491,7 @@ class Processor {
                         }
 
                         const collection = await this.chroma.getOrCreateCollection({
-                            name: source.collectionId,
+                            name: source._id!,
                             embeddingFunction: { generate: (texts) => this.embedder.embed(texts) },
                         });
                         logger("Deleting previous vectors for source " + source._id);
@@ -530,7 +530,7 @@ class Processor {
                                 documents: batchDocuments,
                             });
                             numProcessed += batchIds.length;
-                            logger(`Wrote ${numProcessed}/${total} segments to vector collection ${source.collectionId}`);
+                            logger(`Wrote ${numProcessed}/${total} segments to vector collection ${source._id}`);
                         }
 
                         await this.finishJob(job._id!, true);

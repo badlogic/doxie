@@ -4,7 +4,7 @@ import { BaseElement } from "../app.js";
 import { Store } from "../utils/store.js";
 import { pageContainerStyle, pageContentStyle } from "../utils/styles.js";
 import { i18n } from "../utils/i18n.js";
-import { Api, Collection } from "../common/api.js";
+import { Api, Bot } from "../common/api.js";
 import { map } from "lit/directives/map.js";
 
 @customElement("main-page")
@@ -13,7 +13,7 @@ export class MainPage extends BaseElement {
     isLoading = true;
 
     @state()
-    collections?: Collection[];
+    bots?: Bot[];
 
     @state()
     error?: string;
@@ -25,14 +25,14 @@ export class MainPage extends BaseElement {
 
     async load() {
         try {
-            const collections = await Api.getCollections("noauth");
-            if (!collections.success) {
-                this.error = i18n("Could not load collections");
+            const bots = await Api.getBots("noauth");
+            if (!bots.success) {
+                this.error = i18n("Could not load bots");
                 return;
             }
-            this.collections = collections.data;
+            this.bots = bots.data;
         } catch (e) {
-            this.error = i18n("Could not load collections");
+            this.error = i18n("Could not load bots");
         } finally {
             this.isLoading = false;
         }
@@ -51,8 +51,8 @@ export class MainPage extends BaseElement {
             </div>`;
         }
 
-        if (!this.collections) {
-            this.error = i18n("Could not load collections");
+        if (!this.bots) {
+            this.error = i18n("Could not load bots");
         }
 
         if (this.error) {
@@ -74,8 +74,8 @@ export class MainPage extends BaseElement {
                     <h1 class="text-center animate-fade">Doxie</h1>
                     <text-typer class="text-center text-xs mb-12" .text=${i18n("Chat with your documents, websites, ...")}></text-typer>
                     ${map(
-                        this.collections,
-                        (col) => html`<a href="/chat/${col._id}" class="mb-4 p-2 hover:text-primary">${i18n("Chat with ") + col.name}</a>`
+                        this.bots,
+                        (bot) => html`<a href="/chat/${bot._id}" class="mb-4 p-2 hover:text-primary">${i18n("Chat with ") + bot.name}</a>`
                     )}
                 </div>
             </div>

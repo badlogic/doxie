@@ -2,7 +2,7 @@ import { html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { BaseElement, renderTopbar, closeButton, renderError } from "../app";
 import { appState } from "../appstate";
-import { Source, FaqSource, FlarumSource, Api, FaqSourceEntry, SitemapSource, MarkdownZipSource, apiPost } from "../common/api";
+import { Source, FaqSource, FlarumSource, Api, FaqSourceEntry, SitemapSource, MarkdownZipSource, apiPost, ProcessingJob, Bot } from "../common/api";
 import { i18n } from "../utils/i18n";
 import { router } from "../utils/routing";
 import { Store } from "../utils/store";
@@ -34,7 +34,7 @@ export class SourcePage extends BaseElement {
         const id = router.getCurrentParams()?.get("id");
         const type = router.getCurrentParams()?.get("type");
 
-        if (!id) {
+        if (!id && !type) {
             this.error = i18n("Could not load source");
             return;
         }
@@ -42,7 +42,7 @@ export class SourcePage extends BaseElement {
         if (type) {
             this.isNew = true;
             this.isLoading = false;
-            this.source = this.createNewSource(id, type as Source["type"]);
+            this.source = this.createNewSource(type as Source["type"]);
         } else {
             if (adminToken && id) {
                 this.getSource(adminToken, id);
@@ -50,12 +50,11 @@ export class SourcePage extends BaseElement {
         }
     }
 
-    createNewSource(collectionId: string, type: Source["type"]) {
+    createNewSource(type: Source["type"]) {
         switch (type) {
             case "faq": {
                 const source: FaqSource = {
                     type: "faq",
-                    collectionId,
                     name: "",
                     description: "",
                     faqs: [],
@@ -65,7 +64,6 @@ export class SourcePage extends BaseElement {
             case "flarum": {
                 const source: FlarumSource = {
                     type: "flarum",
-                    collectionId,
                     name: "",
                     description: "",
                     apiUrl: "",
@@ -77,7 +75,6 @@ export class SourcePage extends BaseElement {
             case "sitemap": {
                 const source: SitemapSource = {
                     type: "sitemap",
-                    collectionId,
                     name: "",
                     description: "",
                     url: "",
@@ -91,7 +88,6 @@ export class SourcePage extends BaseElement {
             case "markdownzip": {
                 const source: MarkdownZipSource = {
                     type: "markdownzip",
-                    collectionId,
                     name: "",
                     description: "",
                     file: "",
@@ -217,7 +213,7 @@ export class SourcePage extends BaseElement {
             if (result.error == "Duplicate source name") {
                 this.error = i18n("Source with this name already exists");
             } else {
-                this.error = i18n("Could not save collection");
+                this.error = i18n("Could not save source");
                 this.requestUpdate();
             }
         } else {
@@ -562,6 +558,146 @@ export class SitemapSourceElement extends BaseSourceElement {
                 }
             }
         }
+        this.requestUpdate();
+    }
+}
+
+@customElement("source-panel")
+export class SourcePanel extends BaseElement {
+    @property()
+    source?: Source;
+
+    @state()
+    error?: string;
+
+    @state()
+    job?: ProcessingJob;
+
+    @state()
+    bots: Bot[] = [];
+
+    timeoutId: any = -1;
+    connectedCallback(): void {
+        super.connectedCallback();
+        const updateJob = async () => {
+            await this.getJob(Store.getAdminToken()!);
+            this.timeoutId = setTimeout(updateJob, 1000);
+        };
+        updateJob();
+        this.getBots(Store.getAdminToken()!);
+    }
+
+    disconnectedCallback(): void {
+        super.disconnectedCallback();
+        clearTimeout(this.timeoutId);
+    }
+
+    async getBots(adminToken: string) {
+        const bots = await Api.getBots(adminToken);
+        if (!bots.success) {
+            this.error = i18n("Could not load bots");
+        } else {
+            this.bots = bots.data;
+        }
+    }
+
+    async getJob(adminToken: string) {
+        if (!adminToken) return;
+        if (!this.source) return;
+        const jobs = await Api.getJob(adminToken, this.source._id!);
+        if (!jobs.success) {
+            this.error = i18n("Could not load job");
+        } else {
+            if (jobs.data) this.job = jobs.data;
+        }
+        this.requestUpdate();
+    }
+
+    render() {
+        const source = this.source;
+        if (!source) return renderError("Source not defined");
+
+        if (this.job) {
+            const job = this.job;
+            const toggleLogs = (ev: Event) => {
+                ev.preventDefault();
+                ev.stopPropagation();
+                const target = ev.target as HTMLElement;
+                target.parentElement?.parentElement?.querySelector<HTMLDivElement>("#logs")?.classList.toggle("hidden");
+            };
+
+            let status = "";
+            let color = "";
+            let action = i18n("Process");
+            let stop = false;
+            switch (job.state) {
+                case "running":
+                    status = i18n("Processing");
+                    color = "text-green-400";
+                    action = i18n("Stop");
+                    stop = true;
+                    break;
+                case "waiting":
+                    status = i18n("Waiting for processing");
+                    color = "text-yellow-400";
+                    action = i18n("Stop");
+                    stop = true;
+                    break;
+                case "succeeded":
+                    status = i18n("Processing succeeded")(job.finishedAt, job.startedAt);
+                    color = "text-green-400";
+                    break;
+                case "failed":
+                    status = i18n("Processing failed")(job.finishedAt);
+                    color = "text-red-400";
+                    break;
+                case "stopped":
+                    status = i18n("Processing stopped by user")(job.finishedAt);
+            }
+
+            return html`<div class="flex flex-col gap-2">
+                ${this.error ? renderError(this.error) : nothing}
+                <span class="${color} font-semibold text-sm">${status}</span>
+                <div class="flex gap-2 items-center">
+                    <button class="self-start button" @click=${(ev: Event) => this.process(ev, stop)}>${action}</button>
+                    <button class="self-start button" @click=${toggleLogs}>${i18n("Logs")}</button>
+                    <a href="/documents/${source._id}" class="self-start button">${i18n("Docs")}</a>
+                    <dropdown-button
+                        .content=${html`<div class="self-start button">${i18n("Chat")}</div>`}
+                        .values=${this.bots.map((bot) => {
+                            return { label: bot.name, value: bot };
+                        })}
+                        .onSelected=${(bot: { value: Bot; label: string }) => this.chat(bot.value)}
+                    >
+                    </dropdown-button>
+                </div>
+                <div id="logs" class="hidden debug hljs p-4 whitespace-pre-wrap min-h-80 max-h-80">${job.log}</div>
+            </div>`;
+        } else {
+            return html`<div class="flex flex-col gap-2">
+                ${this.error ? renderError(this.error) : nothing}
+                <button class="self-start button" @click=${(ev: Event) => this.process(ev, false)}>${i18n("Process")}</button>
+            </div>`;
+        }
+    }
+
+    chat(bot: Bot) {
+        router.push(`/chat/${bot._id}/${this.source?._id}`);
+    }
+
+    async process(ev: Event, stop: boolean) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const source = this.source;
+        if (!source) return;
+        const job = stop
+            ? await Api.stopProcessingSource(Store.getAdminToken()!, source._id!)
+            : await Api.processSource(Store.getAdminToken()!, source._id!);
+        if (!job.success) {
+            alert("Could not start processing");
+            return;
+        }
+        this.job = job.data;
         this.requestUpdate();
     }
 }
