@@ -85,6 +85,12 @@ export class App extends LitElement {
             () => i18n("Docs")
         );
 
+        router.addRoute(
+            "/answer/:bot",
+            () => html`<answer-page></answer-page>`,
+            () => i18n("Answer")
+        );
+
         router.setRootRoute("/");
         router.setNotFoundRoot("/404");
         router.replace(location.pathname);

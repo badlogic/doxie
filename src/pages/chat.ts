@@ -95,6 +95,51 @@ const marked = new Marked(
     })
 );
 
+export function renderCompletionDebug(debug: CompletionDebug) {
+    const debugQuery = debug.query;
+    const debugRagHistory = debug.ragHistory;
+    const debugRagQuery = debug.ragQuery;
+    const debugMessages = debug.submittedMessages;
+    const debugResponse = debug.response;
+    const debugTokens = (debug.tokensIn ?? 0) + (debug.tokensOut ?? 0);
+    const debugHighlight = (content: string) => {
+        content = escapeHtml(content);
+        const result = content
+            .replaceAll(/---snippet-(\d+)/g, '<b class="text-blue-400">---snippet-$1</b>')
+            .replaceAll(/---question/g, '<b class="text-blue-400">---question</b>')
+            .replaceAll(/---/g, '<b class="text-blue-400">---</b>')
+            .replaceAll(/---topicdrift/g, '<b class="text-blue-400">---topicdrift</b>');
+        return result;
+    };
+
+    // prettier-ignore
+    return html`${debugQuery ? html`
+                    <div class="debug hljs p-4 w-full flex flex-col mt-2">
+                        <span class="text-sm font-semibold">User query</span>
+                        <pre><code>${debugQuery}</code></pre>
+                    </div>`: nothing}
+                    ${debugRagHistory ? html`
+                    <div class="debug hljs p-4 w-full flex flex-col mt-2">
+                        <span class="text-sm font-semibold">RAG history</span>
+                        <pre><code>${debugRagHistory}</code></pre>
+                    </div>`: nothing}
+                ${debugRagQuery ? html`
+                    <div class="debug hljs p-4 w-full flex flex-col mt-2">
+                        <span class="text-sm font-semibold">RAG query</span>
+                        <pre><code>${debugRagQuery}</code></pre>
+                    </div>`: nothing}
+                ${debugMessages && debugResponse? html`
+                    <div class="debug hljs p-4 w-full flex flex-col mt-2">
+                        <span class="text-sm font-semibold">Request/Response</span>
+                        <pre class="whitespace-pre-wrap"><code>${map(debugMessages, (msg) => html`<b class="text-green-400">${msg.role}</b>\n${unsafeHTML(debugHighlight(msg.content))}\n`)}\n\n<b class="text-green-400">response</b>\n${unsafeHTML(debugHighlight(debugResponse))}</code></pre>
+                    </div>`: nothing}
+                    ${debugTokens > 0 ? html`
+                    <div class="debug hljs p-4 w-full flex flex-col mt-2">
+                        <span class="text-sm font-semibold">Tokens</span>
+                        <pre class="whitespace-pre-wrap"><code class="text-blue-400">${debug.tokensIn} in, ${debug.tokensOut} out, ${debugTokens} total</code></pre>
+                    </div>`: nothing}`;
+}
+
 @customElement("chat-message")
 export class ChatMessageElement extends BaseElement {
     @property()
@@ -197,61 +242,20 @@ export class ChatGptReply extends BaseElement {
               ></span>`
             : nothing;
         const markdown = DOMPurify.sanitize(marked.parse(this.text.trim()) as string);
-        const debugQuery = this.debug?.query;
-        const debugRagHistory = this.debug?.ragHistory;
-        const debugRagQuery = this.debug?.ragQuery;
-        const debugMessages = this.debug?.submittedMessages;
-        const debugResponse = this.debug?.response;
-        const debugTokens = (this.debug?.tokensIn ?? 0) + (this.debug?.tokensOut ?? 0);
-        const debugHighlight = (content: string) => {
-            content = escapeHtml(content);
-            const result = content
-                .replaceAll(/---snippet-(\d+)/g, '<b class="text-blue-400">---snippet-$1</b>')
-                .replaceAll(/---question/g, '<b class="text-blue-400">---question</b>')
-                .replaceAll(/---/g, '<b class="text-blue-400">---</b>')
-                .replaceAll(/---topicdrift/g, '<b class="text-blue-400">---topicdrift</b>');
-            return result;
-        };
 
-        // prettier-ignore
         return html`<div class="chat-message-bot flex w-full max-w-full px-4 gap-4">
-            ${this.botIcon ? html`<img class="chat-icon-img" src="/files/${this.botIcon}">`: html`<div
-                class="chat-icon-noimg flex-shrink-0 flex items-center justify-center"
-            >
-                <span>${this.botName.charAt(0).toUpperCase()}</span>
-            </div>`}
+            ${this.botIcon
+                ? html`<img class="chat-icon-img" src="/files/${this.botIcon}" />`
+                : html`<div class="chat-icon-noimg flex-shrink-0 flex items-center justify-center">
+                      <span>${this.botName.charAt(0).toUpperCase()}</span>
+                  </div>`}
             <div class="overflow-auto flex-1 flex flex-col">
                 <div class="chat-message-name">${this.botName}</div>
                 <div class="chat-message-text">${unsafeHTML(markdown)}${cursor}</div>
                 ${this.error
                     ? html`<div class="bg-red-500 w-full flex items-center px-4 py-2 text-[#fff] gap-2 rounded-md">${this.error}</div>`
                     : nothing}
-                    ${debugQuery ? html`
-                    <div class="debug hljs p-4 w-full flex flex-col mt-2">
-                        <span class="text-sm font-semibold">User query</span>
-                        <pre><code>${debugQuery}</code></pre>
-                    </div>`: nothing}
-                    ${debugRagHistory ? html`
-                    <div class="debug hljs p-4 w-full flex flex-col mt-2">
-                        <span class="text-sm font-semibold">RAG history</span>
-                        <pre><code>${debugRagHistory}</code></pre>
-                    </div>`: nothing}
-                ${debugRagQuery ? html`
-                    <div class="debug hljs p-4 w-full flex flex-col mt-2">
-                        <span class="text-sm font-semibold">RAG query</span>
-                        <pre><code>${debugRagQuery}</code></pre>
-                    </div>`: nothing}
-                ${debugMessages && debugResponse? html`
-                    <div class="debug hljs p-4 w-full flex flex-col mt-2">
-                        <span class="text-sm font-semibold">Request/Response</span>
-                        <pre class="whitespace-pre-wrap"><code>${map(debugMessages, (msg) => html`<b class="text-green-400">${msg.role}</b>\n${unsafeHTML(debugHighlight(msg.content))}\n`)}\n\n<b class="text-green-400">response</b>\n${unsafeHTML(debugHighlight(debugResponse))}</code></pre>
-                    </div>`: nothing}
-                    ${debugTokens > 0 ? html`
-                    <div class="debug hljs p-4 w-full flex flex-col mt-2">
-                        <span class="text-sm font-semibold">Tokens</span>
-                        <pre class="whitespace-pre-wrap"><code class="text-blue-400">${this.debug?.tokensIn} in, ${this.debug?.tokensOut} out, ${debugTokens} total</code></pre>
-                    </div>`: nothing}
-                </div>
+                ${this.debug ? renderCompletionDebug(this.debug) : nothing}
             </div>
         </div>`;
     }

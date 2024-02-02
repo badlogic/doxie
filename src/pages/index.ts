@@ -5,3 +5,4 @@ export * from "./main.js";
 export * from "./settings.js";
 export * from "./source.js";
 export * from "./documents.js";
+export * from "./answer.js";

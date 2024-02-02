@@ -81,6 +81,8 @@ export interface Messages {
     "Staff user names": string;
     "Query URL": string;
     "Could not load sources": string;
+    Question: string;
+    "Could not get answer": string;
 }
 
 const english: Messages = {
@@ -169,6 +171,8 @@ const english: Messages = {
     "Staff user names": "Staff user names",
     "Query URL": "Query URL",
     "Could not load sources": "Could not load sources",
+    Question: "Question",
+    "Could not get answer": "Could not get answer",
 };
 
 export type LanguageCode = "en";

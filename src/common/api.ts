@@ -393,4 +393,8 @@ export class Api {
             return undefined;
         }
     }
+
+    static async answer(botId: string, question: string, sourceIds?: string[]) {
+        return apiPost<{ answer: string; debug: CompletionDebug }>("answer", { botId, question, sourceIds });
+    }
 }

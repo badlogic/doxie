@@ -444,6 +444,21 @@ function logError(endpoint: string, message: string, e: any) {
         }
     );
 
+    app.post("/api/answer", [body("botId").notEmpty().isString()], async (req: Request, res: Response) => {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return apiError(res, "Invalid parameters", errors.array());
+        try {
+            const botId = req.body.botId;
+            const question = req.body.question;
+            const sourceIds = req.body.sourceIds;
+            const answer = await sessions.answer(botId, question, sourceIds);
+            apiSuccess(res, answer);
+        } catch (e) {
+            logError(req.path, "Couldn't create answer", e);
+            apiError(res, "Couldn't create answer");
+        }
+    });
+
     app.get("/api/html", async (req, res) => {
         try {
             const url = req.query.url as string;

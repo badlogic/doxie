@@ -104,7 +104,10 @@ export class BotPage extends BaseElement {
         return html`<div class="${pageContainerStyle}">
             ${topBar}
             <div class="${pageContentStyle} px-4 gap-4">
-                <a href="/chat/${bot._id!}" class="button self-start">${i18n("Chat")}</a>
+                <div class="flex gap-4">
+                    <a href="/chat/${bot._id!}" class="button self-start">${i18n("Chat")}</a>
+                    <a href="/answer/${bot._id!}" class="button self-start">${i18n("Answer")}</a>
+                </div>
                 ${this.bot._id ? html`<span><strong>Id:</strong> ${this.bot._id}</span>` : nothing}
                 <span class="self-start text-xs text-muted-fg font-semibold -mb-6 ml-2 bg-background z-[5] px-1">${i18n("Name")}</span>
                 <input
