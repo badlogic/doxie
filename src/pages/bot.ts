@@ -104,7 +104,7 @@ export class BotPage extends BaseElement {
         return html`<div class="${pageContainerStyle}">
             ${topBar}
             <div class="${pageContentStyle} px-4 gap-4">
-                <div class="flex gap-4">
+                <div class="flex gap-2">
                     <a href="/chat/${bot._id!}" class="button self-start">${i18n("Chat")}</a>
                     <a href="/answer/${bot._id!}" class="button self-start">${i18n("Answer")}</a>
                 </div>
@@ -193,7 +193,7 @@ export class BotPage extends BaseElement {
                                               <span class="font-semibold">${source.name}</span>
                                               <span class="font-semibold">Id: ${source._id}</span>
                                               <button
-                                                  class="hover:text-primary w-6 h-6 flex items-center justify-center"
+                                                  class="ml-auto hover:text-primary w-6 h-6 flex items-center justify-center"
                                                   @click=${(ev: Event) => this.deleteSource(ev, source)}
                                               >
                                                   <i class="icon w-5 h-5">${deleteIcon}</i>

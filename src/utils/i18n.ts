@@ -83,6 +83,7 @@ export interface Messages {
     "Could not load sources": string;
     Question: string;
     "Could not get answer": string;
+    "Copied id": string;
 }
 
 const english: Messages = {
@@ -173,6 +174,7 @@ const english: Messages = {
     "Could not load sources": "Could not load sources",
     Question: "Question",
     "Could not get answer": "Could not get answer",
+    "Copied id": "Copied id",
 };
 
 export type LanguageCode = "en";

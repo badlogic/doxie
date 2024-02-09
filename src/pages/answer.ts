@@ -50,7 +50,8 @@ export class AnswerPage extends BaseElement {
             } else {
                 this.sources = sources.data;
             }
-            this.selectedSources = new Set<string>(this.bot.sources);
+            const urlSources = new URLSearchParams(location.search).get("sources")?.split("|");
+            this.selectedSources = new Set<string>(urlSources ?? this.bot.sources);
         } catch (e) {
             this.error = i18n("Could not load bot");
         } finally {
@@ -86,7 +87,7 @@ export class AnswerPage extends BaseElement {
             </style>
             <div class="${pageContentStyle} px-4 gap-4">
                 <span>Bot: ${this.bot?.name}</span>
-                <div class="flex gap-4">
+                <div class="flex flex-wrap gap-4">
                     ${map(
                         this.sources,
                         (source) =>

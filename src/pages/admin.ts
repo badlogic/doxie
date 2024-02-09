@@ -2,7 +2,7 @@ import { PropertyValueMap, html, nothing } from "lit";
 import { repeat } from "lit-html/directives/repeat.js";
 import { customElement, state } from "lit/decorators.js";
 import { map } from "lit/directives/map.js";
-import { BaseElement, closeButton, downloadJson, renderError, renderTopbar, toast, uploadJson } from "../app.js";
+import { BaseElement, closeButton, copyTextToClipboard, downloadJson, renderError, renderTopbar, toast, uploadJson } from "../app.js";
 import { appState } from "../appstate.js";
 import { Api, Bot, Source } from "../common/api.js";
 import { i18n } from "../utils/i18n.js";
@@ -128,7 +128,7 @@ export class AdminPage extends BaseElement {
                 <div class="flex flex-col gap-4 mb-4">
                     ${map(
                         this.bots,
-                        (bot) => html`<div class="px-4 py-2 flex flex-col gap-2 border border-divider rounded-md underline-none hover:border-primary">
+                        (bot) => html`<div class="px-4 py-4 flex flex-col gap-2 border border-divider rounded-md underline-none hover:border-primary">
                             <a href="/bots/${encodeURIComponent(bot._id ?? "")}" class="flex flex-col gap-2">
                                 <div class="flex gap-2">
                                     <span class="font-semibold">${bot.name}</span>
@@ -145,10 +145,22 @@ export class AdminPage extends BaseElement {
                                         <i class="icon w-5 h-5">${deleteIcon}</i>
                                     </button>
                                 </div>
-                                <span class="font-semibold">Id: ${bot._id}</span>
+                                <span
+                                    class="font-semibold"
+                                    @click=${(ev: Event) => {
+                                        ev.stopPropagation();
+                                        ev.preventDefault();
+                                        copyTextToClipboard(bot._id!);
+                                        toast(i18n("Copied id"));
+                                    }}
+                                    >Id: ${bot._id}</span
+                                >
                                 ${bot.description.length > 0 ? html`<div class="line-clamp-2">${bot.description}</div>` : nothing}
                             </a>
-                            <a href="/chat/${bot._id!}" class="button self-start">${i18n("Chat")}</a>
+                            <div class="flex gap-2">
+                                <a href="/chat/${bot._id!}" class="button self-start">${i18n("Chat")}</a>
+                                <a href="/answer/${bot._id!}" class="button self-start">${i18n("Answer")}</a>
+                            </div>
                         </div>`
                     )}
                 </div>
@@ -196,7 +208,16 @@ export class AdminPage extends BaseElement {
                                         <i class="icon w-5 h-5">${deleteIcon}</i>
                                     </button>
                                 </div>
-                                <span class="font-semibold">Id: ${source._id}</span>
+                                <span
+                                    class="font-semibold"
+                                    @click=${(ev: Event) => {
+                                        ev.stopPropagation();
+                                        ev.preventDefault();
+                                        copyTextToClipboard(source._id!);
+                                        toast(i18n("Copied id"));
+                                    }}
+                                    >Id: ${source._id}</span
+                                >
                                 ${source.description.length > 0 ? html`<div class="line-clamp-2">${source.description}</div>` : nothing}
                             </a>
                             <source-panel .source=${source}></source-panel>
@@ -225,47 +246,23 @@ export class AdminPage extends BaseElement {
     async exportBot(ev: Event, bot: Bot) {
         ev.preventDefault();
         ev.stopPropagation();
-        const sources = await Api.getSources(Store.getAdminToken()!);
-        if (!sources.success) {
-            toast(i18n("Could not export bot"));
-            return;
-        }
         bot = { ...bot };
+        bot.sources = [];
         bot._id = undefined;
-        sources.data.forEach((source) => {
-            source._id = undefined;
-        });
 
-        const botSources = new Set<string>(bot.sources);
-        downloadJson(
-            {
-                collection: bot,
-                sources: sources.data.filter((source) => botSources.has(source._id!)),
-            },
-            bot.name
-        );
+        downloadJson(bot, bot.name);
     }
 
     async importBot(ev: Event) {
         ev.preventDefault();
         ev.stopPropagation();
-        uploadJson(async (data: { bot: Bot; sources: Source[] }) => {
-            const botResult = await Api.setBot(Store.getAdminToken()!, data.bot);
+        uploadJson(async (data: Bot) => {
+            const botResult = await Api.setBot(Store.getAdminToken()!, data);
             if (!botResult.success) {
                 toast(i18n("Could not import bot"));
                 return;
             }
-            const sources: Source[] = [];
-            for (const source of data.sources) {
-                const result = await Api.setSource(Store.getAdminToken()!, source);
-                if (!result.success) {
-                    toast("Could not import source");
-                } else {
-                    sources.push(result.data);
-                }
-            }
             this.bots!.unshift(botResult.data);
-            this.sources?.unshift(...sources);
             this.requestUpdate();
         });
     }

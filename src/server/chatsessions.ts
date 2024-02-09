@@ -134,7 +134,7 @@ export class ChatSessions {
         return { expansion: response.choices[0].message.content ?? "", history };
     }
 
-    async createContext(query: string, sourceIds: string[]) {
+    async createContext(query: string, sourceIds: string[], useCohere = true) {
         // Embed RAG query vector
         let embedStart = performance.now();
         const ragQueryVector = (await this.vectors.embedder.embed([query]))[0];
@@ -147,7 +147,6 @@ export class ChatSessions {
         console.log(`Querying ${sourceIds.length} sources took: ` + ((performance.now() - queryStart) / 1000).toFixed(3) + " secs");
 
         // Rerank results via Cohere if enabled and pick the top 8 results
-        const useCohere = true;
         const k = 5;
         if (this.cohere && useCohere) {
             const start = performance.now();
@@ -288,6 +287,20 @@ export class ChatSessions {
 
         const messages = this.createInitialMessages(bot);
         sourceIds = sourceIds ?? bot.sources;
+        if (sourceIds.length == 0) {
+            return {
+                answer: "I'm sorry I can not help with that",
+                debug: {
+                    query: question,
+                    ragHistory: "",
+                    ragQuery: question,
+                    response: "I'm sorry I can not help with that",
+                    submittedMessages: [],
+                    tokensIn: 0,
+                    tokensOut: 0,
+                },
+            };
+        }
         const context = await this.createContext(question, sourceIds);
         const content = `${context}\n\n---question\n${question}`;
         messages.push({ role: "user", content });
