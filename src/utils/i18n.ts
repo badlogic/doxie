@@ -84,6 +84,12 @@ export interface Messages {
     Question: string;
     "Could not get answer": string;
     "Copied id": string;
+    "Chat model": string;
+    "Max. chat model tokens": string;
+    "Answer model": string;
+    "Max. answer model tokens": string;
+    Model: string;
+    "Max. tokens": string;
 }
 
 const english: Messages = {
@@ -175,6 +181,12 @@ const english: Messages = {
     Question: "Question",
     "Could not get answer": "Could not get answer",
     "Copied id": "Copied id",
+    "Chat model": "Chat model",
+    "Max. chat model tokens": "Max. chat model tokens",
+    "Answer model": "Answer model",
+    "Max. answer model tokens": "Max. answer model tokens",
+    Model: "Model",
+    "Max. tokens": "Max. tokens",
 };
 
 export type LanguageCode = "en";

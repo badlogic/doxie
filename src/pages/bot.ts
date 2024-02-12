@@ -3,7 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { map } from "lit/directives/map.js";
 import { BaseElement, chatDefaultCss, closeButton, dom, downloadJson, renderError, renderTopbar, toast, uploadJson } from "../app.js";
 import { appState } from "../appstate.js";
-import { Api, ChatSession, Bot, ProcessingJob, Source, VectorDocument, apiPost } from "../common/api.js";
+import { Api, ChatSession, Bot, ProcessingJob, Source, VectorDocument, apiPost, openAIModels, OpenAIModel } from "../common/api.js";
 import { i18n } from "../utils/i18n.js";
 import { addIcon, deleteIcon, downloadIcon } from "../utils/icons.js";
 import { router } from "../utils/routing.js";
@@ -22,7 +22,18 @@ export class BotPage extends BaseElement {
     error?: string;
 
     @state()
-    bot: Bot = { name: "", description: "", systemPrompt: "You are a helpful assistant", botName: "Doxie", sources: [] };
+    bot: Bot = {
+        name: "",
+        description: "",
+        systemPrompt: "You are a helpful assistant",
+        botName: "Doxie",
+        sources: [],
+        answerModel: openAIModels[0],
+        answerMaxTokens: 10000,
+        chatModel: openAIModels[0],
+        chatMaxTokens: 10000,
+        useCohere: false,
+    };
 
     @state()
     sources?: Source[];
@@ -120,6 +131,36 @@ export class BotPage extends BaseElement {
                 <textarea id="description" class="textfield py-3" .value=${bot.description} rows="5" @input=${() => this.handleInput()}></textarea>
                 <span class="self-start text-xs text-muted-fg font-semibold -mb-6 ml-2 bg-background z-[5] px-1">${i18n("System prompt")}</span>
                 <textarea id="systemPrompt" class="textfield py-3" .value=${bot.systemPrompt} rows="5" @input=${() => this.handleInput()}></textarea>
+                <span class="self-start text-xs text-muted-fg font-semibold -mb-6 ml-2 bg-background z-[5] px-1">${i18n("Chat model")}</span>
+                <div class="flex gap-4 items-center border border-divider rounded px-2 py-4">
+                    <label><select-box
+                        class=""
+                        .values=${openAIModels.map((model) => {
+                            return { label: model, value: model };
+                        })}
+                        .selected=${bot.chatModel ?? openAIModels[0]}
+                        .change=${(value: OpenAIModel) => (this.bot.chatModel = value)}
+                    > ${i18n("Model")}</label>
+                    </select-box>
+                    <label>${i18n("Max. tokens")} <input class="textfield" id="chatMaxTokens" type="number" min="1000" max="15000" value=${
+            this.bot.chatMaxTokens ?? 3000
+        } @input=${() => this.handleInput()}/></label>
+                </div>
+                <span class="self-start text-xs text-muted-fg font-semibold -mb-6 ml-2 bg-background z-[5] px-1">${i18n("Answer model")}</span>
+                <div class="flex gap-4 items-center border border-divider rounded px-2 py-4">
+                    <label><select-box
+                        class=""
+                        .values=${openAIModels.map((model) => {
+                            return { label: model, value: model };
+                        })}
+                        .selected=${bot.answerModel ?? openAIModels[0]}
+                        .change=${(value: OpenAIModel) => (this.bot.answerModel = value)}
+                    > ${i18n("Model")}</label>
+                    </select-box>
+                    <label>${i18n("Max. tokens")} <input class="textfield" id="answerMaxTokens" type="number" min="1000" max="15000" value=${
+            this.bot.answerMaxTokens ?? 3000
+        } @input=${() => this.handleInput()}/></label>
+                </div>
                 <span class="self-start text-xs text-muted-fg font-semibold -mb-6 ml-2 bg-background z-[5] px-1">${i18n("Chatbot name")}</span>
                 <input
                     id="botName"
@@ -128,19 +169,21 @@ export class BotPage extends BaseElement {
                     @input=${() => this.handleInput()}
                 />
                 <span class="self-start text-xs text-muted-fg font-semibold bg-background z-[5] px-1">${i18n("Chatbot icon (128x128)")}</span>
-                ${this.bot.botIcon
-                    ? html` <img
-                          class="h-12 w-12 border border-divider rounded-full cursor-pointer"
-                          src="/files/${this.bot.botIcon}"
-                          @click=${() => this.uploadImage()}
-                      />`
-                    : html`<div
-                          class="cursor-pointer flex-shrink-0 w-12 h-12 rounded-full dark:border dark:border-muted-fg flex items-center justify-center text-white text-lg"
-                          style="background-color: #ab68ff;"
-                          @click=${() => this.uploadImage()}
-                      >
-                          <span>${(this.bot.botName ?? "Doxie").charAt(0).toUpperCase()}</span>
-                      </div>`}
+                ${
+                    this.bot.botIcon
+                        ? html` <img
+                              class="h-12 w-12 border border-divider rounded-full cursor-pointer"
+                              src="/files/${this.bot.botIcon}"
+                              @click=${() => this.uploadImage()}
+                          />`
+                        : html`<div
+                              class="cursor-pointer flex-shrink-0 w-12 h-12 rounded-full dark:border dark:border-muted-fg flex items-center justify-center text-white text-lg"
+                              style="background-color: #ab68ff;"
+                              @click=${() => this.uploadImage()}
+                          >
+                              <span>${(this.bot.botName ?? "Doxie").charAt(0).toUpperCase()}</span>
+                          </div>`
+                }
                 <span class="self-start text-xs text-muted-fg font-semibold -mb-6 ml-2 bg-background z-[5] px-1"
                     >${i18n("Chatbot welcome message")}</span
                 >
@@ -164,54 +207,56 @@ export class BotPage extends BaseElement {
                     @keydown=${(ev: KeyboardEvent) => this.handleTab(ev)}
                     @input=${() => this.handleInput()}
                 ></textarea>
-                ${!this.isNew
-                    ? html` <div class="flex items-center mt-4 items-center gap-2">
-                              <h2>${i18n("Sources")}</h2>
-                              <dropdown-button
-                                  button
-                                  class="ml-auto"
-                                  .content=${html`<div class="flex items-center hover:text-primary gap-1">
-                                      <i class="icon w-5 h-5">${addIcon}</i><span>${i18n("Add")}</span>
-                                  </div>`}
-                                  .values=${availableSources.map((source) => {
-                                      return { label: source.name, value: source };
-                                  })}
-                                  .onSelected=${(source: { value: Source; label: string }) => this.addSource(source)}
-                              >
-                              </dropdown-button>
-                          </div>
-                          <div class="flex flex-col gap-4 mb-4">
-                              ${repeat(
-                                  sources,
-                                  (source) => source._id!,
-                                  (source) => html`<div
-                                      class="flex flex-col gap-2 border border-divider rounded-md underline-none hover:border-primary"
+                ${
+                    !this.isNew
+                        ? html` <div class="flex items-center mt-4 items-center gap-2">
+                                  <h2>${i18n("Sources")}</h2>
+                                  <dropdown-button
+                                      button
+                                      class="ml-auto"
+                                      .content=${html`<div class="flex items-center hover:text-primary gap-1">
+                                          <i class="icon w-5 h-5">${addIcon}</i><span>${i18n("Add")}</span>
+                                      </div>`}
+                                      .values=${availableSources.map((source) => {
+                                          return { label: source.name, value: source };
+                                      })}
+                                      .onSelected=${(source: { value: Source; label: string }) => this.addSource(source)}
                                   >
-                                      <a href="/sources/${encodeURIComponent(source._id ?? "")}">
-                                          <div class="flex p-4 pb-0 gap-2">
-                                              <span class="rounded-md px-1 border border-green-600 font-semibold">${source.type}</span>
-                                              <span class="font-semibold">${source.name}</span>
-                                              <span class="font-semibold">Id: ${source._id}</span>
-                                              <button
-                                                  class="ml-auto hover:text-primary w-6 h-6 flex items-center justify-center"
-                                                  @click=${(ev: Event) => this.deleteSource(ev, source)}
-                                              >
-                                                  <i class="icon w-5 h-5">${deleteIcon}</i>
-                                              </button>
-                                          </div>
-                                          ${source.description.trim().length > 0
-                                              ? html`<div class="line-clamp-2 px-4">${source.description}</div>`
-                                              : nothing}
-                                      </a>
-                                      <source-panel class="p-4 pt-0" .source=${source}></source-panel>
-                                  </div>`
-                              )}
-                          </div>
-                          <div class="flex flex-col items-center gap-2">
-                              <h2 class="self-start">${i18n("Chat sessions")}</h2>
-                              <chat-sessions class="w-full" .collectionId=${this.bot._id}></chat-sessions>
-                          </div>`
-                    : nothing}
+                                  </dropdown-button>
+                              </div>
+                              <div class="flex flex-col gap-4 mb-4">
+                                  ${repeat(
+                                      sources,
+                                      (source) => source._id!,
+                                      (source) => html`<div
+                                          class="flex flex-col gap-2 border border-divider rounded-md underline-none hover:border-primary"
+                                      >
+                                          <a href="/sources/${encodeURIComponent(source._id ?? "")}">
+                                              <div class="flex p-4 pb-0 gap-2">
+                                                  <span class="rounded-md px-1 border border-green-600 font-semibold">${source.type}</span>
+                                                  <span class="font-semibold">${source.name}</span>
+                                                  <span class="font-semibold">Id: ${source._id}</span>
+                                                  <button
+                                                      class="ml-auto hover:text-primary w-6 h-6 flex items-center justify-center"
+                                                      @click=${(ev: Event) => this.deleteSource(ev, source)}
+                                                  >
+                                                      <i class="icon w-5 h-5">${deleteIcon}</i>
+                                                  </button>
+                                              </div>
+                                              ${source.description.trim().length > 0
+                                                  ? html`<div class="line-clamp-2 px-4">${source.description}</div>`
+                                                  : nothing}
+                                          </a>
+                                          <source-panel class="p-4 pt-0" .source=${source}></source-panel>
+                                      </div>`
+                                  )}
+                              </div>
+                              <div class="flex flex-col items-center gap-2">
+                                  <h2 class="self-start">${i18n("Chat sessions")}</h2>
+                                  <chat-sessions class="w-full" .collectionId=${this.bot._id}></chat-sessions>
+                              </div>`
+                        : nothing
+                }
             </div>
         </div>`;
     }
@@ -236,6 +281,8 @@ export class BotPage extends BaseElement {
         const botWelcome = this.querySelector<HTMLInputElement>("#botWelcome")!.value.trim();
         const botFooter = this.querySelector<HTMLTextAreaElement>("#botFooter")!.value.trim();
         const botCss = this.querySelector<HTMLTextAreaElement>("#botCss")!.value.trim();
+        const chatMaxTokens = parseInt(this.querySelector<HTMLInputElement>("#chatMaxTokens")!.value);
+        const answerMaxTokens = parseInt(this.querySelector<HTMLInputElement>("#answerMaxTokens")!.value);
 
         const bot = this.bot;
         bot.name = name;
@@ -245,6 +292,8 @@ export class BotPage extends BaseElement {
         bot.botWelcome = botWelcome;
         bot.botFooter = botFooter;
         bot.botCss = botCss;
+        bot.chatMaxTokens = chatMaxTokens;
+        bot.answerMaxTokens = answerMaxTokens;
         this.bot = { ...bot };
         this.requestUpdate();
     }

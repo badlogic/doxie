@@ -154,11 +154,11 @@
         @apply text-sm px-1 border border-divider bg-black text-white;
     }
 
-    .chat-message-bot ol {
+    ol {
         @apply list-decimal list-inside space-y-1;
     }
 
-    .chat-message-bot ul {
+    ul {
         @apply list-disc list-inside space-y-1;
     }
 }

@@ -105,7 +105,7 @@ export function renderCompletionDebug(debug: CompletionDebug) {
     const debugHighlight = (content: string) => {
         content = escapeHtml(content);
         const result = content
-            .replaceAll(/---snippet-(\d+)/g, '<b class="text-blue-400">---snippet-$1</b>')
+            .replaceAll(/---context-(\d+)/g, '<b class="text-blue-400">---context-$1</b>')
             .replaceAll(/---question/g, '<b class="text-blue-400">---question</b>')
             .replaceAll(/---/g, '<b class="text-blue-400">---</b>')
             .replaceAll(/---topicdrift/g, '<b class="text-blue-400">---topicdrift</b>');

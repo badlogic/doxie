@@ -5,6 +5,9 @@ export type Source = FlarumSource | FaqSource | SitemapSource | MarkdownZipSourc
 
 export type Logger = (message: string) => Promise<void>;
 
+export const openAIModels = ["gpt-3.5-turbo", "gpt-3.5-turbo-0125", "gpt-4-turbo-preview", "gpt-4-0125-preview"] as const;
+export type OpenAIModel = (typeof openAIModels)[number];
+
 export interface BaseSource {
     _id?: string;
     name: string;
@@ -69,6 +72,11 @@ export interface Bot {
     botWelcome?: string;
     botFooter?: string;
     botCss?: string;
+    answerModel: OpenAIModel;
+    answerMaxTokens: number;
+    chatModel: OpenAIModel;
+    chatMaxTokens: number;
+    useCohere: boolean;
 }
 
 export interface ProcessingJob {
@@ -107,6 +115,7 @@ export interface VectorMetadata {
 
 export interface VectorDocument extends VectorMetadata {
     text: string;
+    distance: number;
 }
 
 export interface JsonValue {

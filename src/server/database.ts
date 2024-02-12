@@ -216,7 +216,7 @@ export class VectorStore {
         const response = await collection.get({ offset, limit, include: ["metadatas", "documents"] as IncludeEnum[] });
         const vectorDocs: VectorDocument[] = [];
         for (let i = 0; i < response.ids.length; i++) {
-            const vectorDoc: VectorDocument = { ...(response.metadatas[i] as unknown as VectorMetadata), text: response.documents[i]! };
+            const vectorDoc: VectorDocument = { ...(response.metadatas[i] as unknown as VectorMetadata), text: response.documents[i]!, distance: 0 };
             vectorDocs.push(vectorDoc);
         }
         return vectorDocs;
@@ -227,7 +227,7 @@ export class VectorStore {
         const queryConfig: any = {
             queryEmbeddings: [queryVector],
             nResults: k,
-            include: ["metadatas", "documents"] as IncludeEnum[],
+            include: ["metadatas", "documents", "distances"] as IncludeEnum[],
         };
         if (sourceId) {
             queryConfig.where = { sourceId };
@@ -235,7 +235,11 @@ export class VectorStore {
         const response = await collection.query(queryConfig);
         const vectorDocs: VectorDocument[] = [];
         for (let i = 0; i < response.ids[0].length; i++) {
-            const vectorDoc: VectorDocument = { ...(response.metadatas[0][i] as unknown as VectorMetadata), text: response.documents[0][i]! };
+            const vectorDoc: VectorDocument = {
+                ...(response.metadatas[0][i] as unknown as VectorMetadata),
+                text: response.documents[0][i]!,
+                distance: response.distances![0][i],
+            };
             vectorDocs.push(vectorDoc);
         }
         return vectorDocs;

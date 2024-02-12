@@ -1,14 +1,13 @@
 import { CohereClient } from "cohere-ai";
 import { RerankRequestDocumentsItem } from "cohere-ai/api";
-import { encode } from "gpt-tokenizer";
 import { getEncoding } from "js-tiktoken";
 import OpenAI from "openai";
 import { Bot, ChatMessage, ChatSession, CompletionDebug, VectorDocument } from "../common/api";
 import { Database, VectorStore } from "./database";
 
 const tiktokenEncoding = getEncoding("cl100k_base");
-const chatModel = "gpt-3.5-turbo-1106";
-const queryExpansionModel = "gpt-3.5-turbo-1106";
+const queryExpansionModel = "gpt-3.5-turbo";
+const RAG_MAX_DOCUMENTS = 25;
 
 const queryExpansionInstructions = (context: string) =>
     `
@@ -36,38 +35,40 @@ ${context}
 `.trim();
 
 const contextInstructions = `
-In addition to the user question, you are provided with contextual information which you should use to anser the question. The format will be:
----snippet <url of snippet with id 0>
-<title of snippet with id 0>
+The user will provide you with contextual information and a question. The format will be:
+---context <url of context with id 0>
+<title of context with id 0>
 """"""
-<multi-line text of snippet with id 0>
+<multi-line text of context with id 0>
 """"""
----snippet <url of snippet with id 1>
-<title of snippet with id 1>
+---context <url of context with id 1>
+<title of context with id 1>
 """"""
-<multi-line text of snippet with id 1>
+<multi-line text of context with id 1>
 """"""
----snippet <url of snippet with id 2>
-<title of snippet with id 2>
+---context <url of context with id 2>
+<title of context with id 2>
 """"""
-<multi-line text of snippet with id 2>
+<multi-line text of context with id 2>
 """"""
----snippet <url of snippet with id 3>
-<title of snippet with id 3>
+---context <url of context with id 3>
+<title of context with id 3>
 """"""
-<multi-line text of snippet with id 3>
+<multi-line text of context with id 3>
 """"""
----snippet <url of snippet with id 4>
-<title of snippet with id 4>
+---context <url of context with id 4>
+<title of context with id 4>
 """
-<multi-line text of snippet with id 4>
+<multi-line text of context with id 4>
 """
-... more snippets ...
+... more contexts ...
 ---question
 <multi-line text of user question>
 
+Your task is it to answer the question based on the contextual information.
+
 Perform these steps:
-1. Answer the user question based on the snippets or say "I'm sorry I can not help with that" if you can't answer the question based on the information in the snippets.
+1. Answer the user question based on the contextual information. If you can not give a helpful and truthful answer, say "I am sorry I can not help with that"
 2. Generate a 2 sentences long summary of your answer
 
 Follow this output format exactly:
@@ -134,7 +135,7 @@ export class ChatSessions {
         return { expansion: response.choices[0].message.content ?? "", history };
     }
 
-    async createContext(query: string, sourceIds: string[], useCohere = true) {
+    async createContext(query: string, sourceIds: string[], bot: Bot) {
         // Embed RAG query vector
         let embedStart = performance.now();
         const ragQueryVector = (await this.vectors.embedder.embed([query]))[0];
@@ -142,20 +143,19 @@ export class ChatSessions {
 
         // Query all RAG sources
         let queryStart = performance.now();
-        const vectorQueries = sourceIds.map((sourceId) => this.vectors.query(sourceId, ragQueryVector, 25));
+        const vectorQueries = sourceIds.map((sourceId) => this.vectors.query(sourceId, ragQueryVector, RAG_MAX_DOCUMENTS));
         const context = (await Promise.all(vectorQueries)).flat();
         console.log(`Querying ${sourceIds.length} sources took: ` + ((performance.now() - queryStart) / 1000).toFixed(3) + " secs");
-
+        context.sort((a, b) => a.distance - b.distance);
         // Rerank results via Cohere if enabled and pick the top 8 results
-        const k = 5;
-        if (this.cohere && useCohere) {
+        if (this.cohere && bot.useCohere) {
             const start = performance.now();
             const reranked: RerankRequestDocumentsItem[] = context.map((doc) => {
                 return { text: doc.text };
             });
             const response = await this.cohere.rerank({
                 model: `rerank-multilingual-v2.0`,
-                topN: k,
+                topN: RAG_MAX_DOCUMENTS,
                 query: query,
                 returnDocuments: false,
                 documents: reranked,
@@ -167,41 +167,96 @@ export class ChatSessions {
             context.length = 0;
             context.push(...newContext);
             console.log("Reranking took: " + ((performance.now() - start) / 1000).toFixed(3) + " secs");
-        } else {
-            context.length = k;
         }
 
         // Create new user message, composed of user message and RAG context
-        const contextContent = context
-            .map((doc) => "---snippet " + doc.docUri.trim() + "\n" + doc.docTitle.trim() + "\n" + `""""""\n` + doc.text.trim() + `\n""""""`)
-            .join("\n\n");
+        const contextContent = context.map(
+            (doc) => "---context " + doc.docUri.trim() + "\n" + doc.docTitle.trim() + "\n" + `""""""\n` + doc.text.trim() + `\n""""""`
+        );
         return contextContent;
     }
 
-    async complete(sessionId: string, message: string, chunkcb: (chunk: string, type: "text" | "debug") => void) {
+    async complete(sessionId: string, question: string, chunkcb: (chunk: string, type: "text" | "debug") => void) {
         const session = await this.database.getChat(sessionId);
         if (!session) throw new Error("Session does not exist");
 
+        const bot = await this.database.getBot(session.botId);
+        if (!bot) throw new Error("Bot does not exist");
+
         // Check debug flag in message
-        session.debug = session.debug || message.includes("---debug");
-        message = message.replaceAll("---debug", "").trim();
+        session.debug = session.debug || question.includes("---debug");
+        question = question.replaceAll("---debug", "").trim();
 
         // Expand query for RAG
-        const ragQuery = await this.expandQuery(message, session.rawMessages);
+        const ragQuery = await this.expandQuery(question, session.rawMessages);
 
         // Create context from RAG sources
-        const context = await this.createContext(ragQuery.expansion, session.sourceIds);
-        const messageContent = `${context}\n\n---question\n${message}`;
+        let context = await this.createContext(ragQuery.expansion, session.sourceIds, bot);
+
+        // Combine system messages (system + welcome), history, rag context, and question
+        // Stay within token window size by
+        // - fill 50% of (max tokens - system messages tokens - question tokens) with rag context
+        // - filling up the remainder with history
+        // - filling up the remainder with additional rag context
+        let systemTokens = 0;
+        for (let i = 0; i < 2; i++) {
+            const msg = session.rawMessages[i];
+            systemTokens += tiktokenEncoding.encode(msg.content).length;
+        }
+        const questionTokens = tiktokenEncoding.encode(question).length;
+        let tokenBudget = bot.chatMaxTokens - systemTokens - questionTokens;
+        let halfTokenBudget = tokenBudget / 2;
+        let culledContext: string[] = [];
+        while (context.length > 0) {
+            const ctx = context.splice(0, 1)[0];
+            const ctxTokens = tiktokenEncoding.encode(ctx).length;
+            halfTokenBudget -= ctxTokens;
+            if (halfTokenBudget < 0) {
+                context = [ctx, ...context];
+                break;
+            }
+            culledContext.push(ctx);
+        }
+
+        halfTokenBudget = tokenBudget / 2;
+        let culledMessages: ChatMessage[] = [];
+        for (let i = session.rawMessages.length - 1; i > 1; i--) {
+            const msg = session.rawMessages[i];
+            const msgTokens = tiktokenEncoding.encode(msg.content).length;
+            halfTokenBudget -= msgTokens;
+            if (halfTokenBudget < 0) {
+                break;
+            }
+            culledMessages.push(msg);
+        }
+        culledMessages.push(session.rawMessages[1]);
+        culledMessages.push(session.rawMessages[0]);
+        culledMessages.reverse();
+
+        while (context.length > 0) {
+            const ctx = context.splice(0, 1)[0];
+            const ctxTokens = tiktokenEncoding.encode(ctx).length;
+            halfTokenBudget -= ctxTokens;
+            if (halfTokenBudget < 0) {
+                context = [ctx, ...context];
+                break;
+            }
+            culledContext.push(ctx);
+        }
+
+        const messageContent = `${culledContext.join("\n\n")}\n\n---question\n${question}`;
+        culledMessages.push({
+            role: "user",
+            content: messageContent,
+        });
         session.messages.push({
             role: "user",
             content: messageContent,
         });
-        session.rawMessages.push({ role: "user", content: message });
-
+        session.rawMessages.push({ role: "user", content: question });
         // Submit completion request to OpenAI, consisting of (summarized) history, new user message + RAG context
         let response = "";
-        const submittedMessages = [...session.rawMessages];
-        submittedMessages.push(session.messages[session.messages.length - 1]);
+        const submittedMessages = [...culledMessages];
 
         // Stream response. If a command is detected, stop calling the chunk callback
         // so frontend never sees commands.
@@ -209,7 +264,12 @@ export class ChatSessions {
         let tries = 2;
         let answer = "";
         while (tries > 0) {
-            const stream = await this.openai.chat.completions.create({ model: chatModel, messages: submittedMessages, temperature: 0, stream: true });
+            const stream = await this.openai.chat.completions.create({
+                model: bot.chatModel,
+                messages: submittedMessages,
+                temperature: 0,
+                stream: true,
+            });
             let first = true;
             let inAnswer = true;
             let waitForNextDelta = false;
@@ -258,15 +318,15 @@ export class ChatSessions {
             submittedMessages.forEach((msg) => (submitted += typeof msg.content == "string" ? msg.content : ""));
 
             const debug: CompletionDebug = {
-                query: message,
+                query: question,
                 ragQuery: ragQuery.expansion,
                 ragHistory: ragQuery.history,
                 submittedMessages: submittedMessages.map((msg) => {
                     return { role: msg.role, content: typeof msg.content == "string" ? msg.content : "" };
                 }),
                 response,
-                tokensIn: encode(submitted).length,
-                tokensOut: encode(response).length,
+                tokensIn: tiktokenEncoding.encode(submitted).length,
+                tokensOut: tiktokenEncoding.encode(response).length,
             };
 
             chunkcb(JSON.stringify(debug, null, 2), "debug");
@@ -301,12 +361,29 @@ export class ChatSessions {
                 },
             };
         }
-        const context = await this.createContext(question, sourceIds);
-        const content = `${context}\n\n---question\n${question}`;
+        let systemTokens = 0;
+        for (const msg of messages) {
+            systemTokens += tiktokenEncoding.encode(msg.content).length;
+        }
+        const questionTokens = tiktokenEncoding.encode(question).length;
+        let tokenBudget = bot.answerMaxTokens - systemTokens - questionTokens;
+
+        const context = await this.createContext(question, sourceIds, bot);
+        const culledContext: string[] = [];
+        for (const ctx of context) {
+            const ctxTokens = tiktokenEncoding.encode(ctx).length;
+            tokenBudget -= ctxTokens;
+            if (tokenBudget < 0) {
+                break;
+            }
+            culledContext.push(ctx);
+        }
+
+        const content = `${culledContext.join("\n\n")}\n\n---question\n${question}`;
         messages.push({ role: "user", content });
 
         const start = performance.now();
-        const response = await this.openai.chat.completions.create({ model: chatModel, messages, temperature: 0, stream: false });
+        const response = await this.openai.chat.completions.create({ model: bot.answerModel, messages, temperature: 0, stream: false });
         console.log("Answer took: " + ((performance.now() - start) / 1000).toFixed(3) + " secs");
 
         const answer = response.choices[0].message.content ?? "";
