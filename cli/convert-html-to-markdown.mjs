@@ -32,8 +32,9 @@ readFiles(baseDir, async (file) => {
         }
         const content = fs.readFileSync(file, "utf-8");
         let markdown = await htmlToMarkdown({ html: content });
-        markdown = file.replace(baseDir, baseUrl) + "\n\n" + markdown.split("\n")[0].replaceAll("#", "").trim() + "\n[[]]\n" + markdown;
+        markdown = file.replace(baseDir, baseUrl) + "\n" + markdown;
         const filename = file.split("/").pop().replace(".html", ".md");
-        fs.writeFileSync(path + "/" + filename, markdown, "utf-8");
+        const out = path + "/" + filename;
+        fs.writeFileSync(out, markdown, "utf-8");
     }
 });

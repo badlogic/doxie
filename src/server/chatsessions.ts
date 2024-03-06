@@ -368,6 +368,7 @@ export class ChatSessions {
         const questionTokens = tiktokenEncoding.encode(question).length;
         let tokenBudget = bot.answerMaxTokens - systemTokens - questionTokens;
 
+        console.log(`system tokens: ${systemTokens}, question tokens: ${questionTokens}`);
         const context = await this.createContext(question, sourceIds, bot);
         const culledContext: string[] = [];
         for (const ctx of context) {

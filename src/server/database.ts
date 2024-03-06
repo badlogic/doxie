@@ -222,12 +222,17 @@ export class VectorStore {
         return vectorDocs;
     }
 
-    async query(sourceId: string, queryVector: number[], k: number = 10) {
+    async query(
+        sourceId: string,
+        queryVector: number[],
+        k: number = 10,
+        include: ("metadatas" | "documents" | "distances")[] = ["metadatas", "documents", "distances"]
+    ) {
         const collection = await this.chroma.getCollection({ name: sourceId });
         const queryConfig: any = {
             queryEmbeddings: [queryVector],
             nResults: k,
-            include: ["metadatas", "documents", "distances"] as IncludeEnum[],
+            include: include as IncludeEnum[],
         };
         if (sourceId) {
             queryConfig.where = { sourceId };
@@ -237,8 +242,8 @@ export class VectorStore {
         for (let i = 0; i < response.ids[0].length; i++) {
             const vectorDoc: VectorDocument = {
                 ...(response.metadatas[0][i] as unknown as VectorMetadata),
-                text: response.documents[0][i]!,
-                distance: response.distances![0][i],
+                text: response.documents ? response.documents[0][i]! : "",
+                distance: response.distances ? response.distances![0][i] : 0,
             };
             vectorDocs.push(vectorDoc);
         }

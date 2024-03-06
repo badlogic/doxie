@@ -8,7 +8,7 @@ import path from "path";
 import * as http from "http";
 import multer from "multer";
 import WebSocket, { WebSocketServer } from "ws";
-import { Bot, ProcessingJob, Source } from "../common/api";
+import { Bot, ProcessingJob, Source, VectorDocument } from "../common/api";
 import { ErrorReason } from "../common/errors";
 import { ChatSessions } from "./chatsessions";
 import { Database, VectorStore } from "./database";
@@ -451,11 +451,44 @@ function logError(endpoint: string, message: string, e: any) {
             const botId = req.body.botId;
             const question = req.body.question;
             const sourceIds = req.body.sourceIds;
+            console.log("Answering question " + question + " via bot " + botId + ", sources: " + sourceIds);
             const answer = await sessions.answer(botId, question, sourceIds);
             apiSuccess(res, answer);
+            console.log("Answer: " + answer.answer);
         } catch (e) {
             logError(req.path, "Couldn't create answer", e);
             apiError(res, "Couldn't create answer");
+        }
+    });
+
+    app.get("/api/search", async (req, res) => {
+        try {
+            if (!req.query.query || typeof req.query.query != "string") throw Error("No query given");
+            if (!req.query.sourceId) throw new Error("No source id(s) given");
+            const start = performance.now();
+            const sources = Array.isArray(req.query.sourceId) ? (req.query.sourceId as string[]) : [req.query.sourceId as string];
+            const query = req.query.query;
+            const queryVector = (await vectors.embedder.embed([query]))[0];
+            const k = req.query.k ? parseInt(req.query.k as string) : 50;
+            const seenUrls = new Map<string, VectorDocument>();
+            const resultUrls: string[] = [];
+            for (const source of sources) {
+                const result = await vectors.query(source, queryVector, k, ["metadatas", "documents", "distances"]);
+                for (const res of result) {
+                    if (seenUrls.has(res.docUri)) {
+                        if (seenUrls.get(res.docUri)!.index > res.index) {
+                            seenUrls.set(res.docUri, res);
+                        }
+                        continue;
+                    }
+                    resultUrls.push(res.docUri);
+                    seenUrls.set(res.docUri, res);
+                }
+            }
+            const results = resultUrls.map((url) => seenUrls.get(url)!).sort((a, b) => a.distance - b.distance);
+            res.send({ sources, query, took: (performance.now() - start) / 1000, numResults: results.length, results });
+        } catch (e) {
+            res.status(400).json(e);
         }
     });
 
