@@ -1,4 +1,4 @@
-package com.badlogicgames.gann;
+package com.badlogicgames.jnn;
 
 public class Main {
 
