@@ -2,6 +2,13 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "type": "java",
+            "name": "Benchmark",
+            "request": "launch",
+            "mainClass": "com.badlogicgames.gann.test.Benchmark",
+            "projectName": "gaan"
+        },
+        {
             "name": "server",
             "type": "node",
             "port": 9230,

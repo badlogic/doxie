@@ -1,5 +1,5 @@
 import * as fs from "fs";
-import { Database } from "./database";
+import { Database, ChromaVectorStore, VectorStore } from "./database";
 import { Rag } from "./rag";
 import {
     BaseSource,
@@ -401,11 +401,11 @@ class SitemapProccessor extends BaseProcessor<SitemapSource> {
 
 class Processor {
     embedder: Embedder;
-    chroma: ChromaClient;
+    vectors: VectorStore;
 
     constructor(private jobs: MongoCollection<Document>, readonly database: Database, readonly openaiKey: string) {
         this.embedder = new Embedder(openaiKey, async (message: string) => console.log(message));
-        this.chroma = new ChromaClient({ path: "http://chroma:8000" });
+        this.vectors = new ChromaVectorStore(openaiKey);
     }
 
     async getNextJob(): Promise<ProcessingJob | undefined> {
@@ -437,21 +437,6 @@ class Processor {
         job.log += message + "\n";
         console.log(message);
         await this.updateJobLog(job._id!, job.log);
-    }
-
-    async deleteSourceDocs(collection: Collection, sourceId: string) {
-        const limit = 500;
-        let offset = 0;
-        while (true) {
-            const docIds = await collection.get({ where: { sourceId }, limit, offset, include: [] });
-            if (!docIds.ids || docIds.ids.length == 0) break;
-            await collection.delete({ ids: docIds.ids });
-        }
-
-        const docIds = await collection.get({ where: { sourceId }, limit, offset: 0 });
-        if (docIds.ids?.length > 0) {
-            console.error("Could not delete vectors for source " + sourceId);
-        }
     }
 
     // Method to process the job
@@ -490,48 +475,7 @@ class Processor {
                                 assertNever(source);
                         }
 
-                        const collection = await this.chroma.getOrCreateCollection({
-                            name: source._id!,
-                            embeddingFunction: { generate: (texts) => this.embedder.embed(texts) },
-                        });
-                        logger("Deleting previous vectors for source " + source._id);
-                        await this.deleteSourceDocs(collection, source._id!);
-                        const ids = docs.flatMap((doc) => doc.segments.map((seg, index) => doc.uri + "|" + index));
-                        const embeddings = docs.flatMap((doc) => doc.segments.map((seg) => seg.embedding));
-                        const metadatas = docs.flatMap((doc) =>
-                            doc.segments.map((seg, index) => {
-                                const metadata: VectorMetadata = {
-                                    sourceId: source._id!,
-                                    docUri: doc.uri,
-                                    docTitle: doc.title,
-                                    index,
-                                    tokenCount: seg.tokenCount,
-                                };
-                                return metadata as unknown as Metadata;
-                            })
-                        );
-                        const vectorDocs = docs.flatMap((doc) =>
-                            doc.segments.map((seg) => {
-                                return seg.text;
-                            })
-                        );
-                        let numProcessed = 0;
-                        const total = ids.length;
-                        while (ids.length > 0) {
-                            const batchSize = 2000;
-                            const batchIds = ids.splice(0, batchSize);
-                            const batchEmbeddings = embeddings.splice(0, batchSize);
-                            const batchMetadatas = metadatas.splice(0, batchSize);
-                            const batchDocuments = vectorDocs.splice(0, batchSize);
-                            await collection.upsert({
-                                ids: batchIds,
-                                embeddings: batchEmbeddings,
-                                metadatas: batchMetadatas,
-                                documents: batchDocuments,
-                            });
-                            numProcessed += batchIds.length;
-                            logger(`Wrote ${numProcessed}/${total} segments to vector collection ${source._id}`);
-                        }
+                        this.vectors.update(source._id!, docs, logger);
 
                         await this.finishJob(job._id!, true);
                     } catch (e) {

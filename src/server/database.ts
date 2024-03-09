@@ -1,6 +1,7 @@
+import { ChromaClient, Collection, IncludeEnum, Metadata } from "chromadb";
+import * as fs from "fs";
 import { Document, MongoClient, Collection as MongoCollection, ObjectId } from "mongodb";
-import { ChatSession, Bot, ProcessingJob, Source, VectorDocument, VectorMetadata } from "../common/api";
-import { ChromaClient, IncludeEnum } from "chromadb";
+import { Bot, ChatSession, EmbedderDocument, Logger, ProcessingJob, Source, VectorDocument, VectorMetadata } from "../common/api";
 import { Embedder } from "./embedder";
 
 export class Database {
@@ -203,12 +204,101 @@ export class Database {
     }
 }
 
-export class VectorStore {
+export interface VectorStore {
+    embedder: Embedder;
+    createCollection(sourceId: string): Promise<void>;
+    update(sourceId: string, docs: EmbedderDocument[], logger: Logger): Promise<void>;
+    getDocuments(sourceId: string, offset: number, limit: number): Promise<VectorDocument[]>;
+    query(sourceId: string, queryVector: number[], k: number): Promise<VectorDocument[]>;
+}
+
+export class ChromaVectorStore implements VectorStore {
     chroma: ChromaClient;
     embedder: Embedder;
+
     constructor(openaiKey: string, url = "http://chroma:8000") {
         this.chroma = new ChromaClient({ path: url });
         this.embedder = new Embedder(openaiKey, async (message: string) => console.log(message));
+    }
+
+    async createCollection(sourceId: string) {
+        const collection = await this.chroma.getOrCreateCollection({
+            name: sourceId,
+            embeddingFunction: { generate: (texts) => this.embedder.embed(texts) },
+        });
+    }
+
+    async delete(collection: Collection, sourceId: string) {
+        const limit = 500;
+        let offset = 0;
+        while (true) {
+            const docIds = await collection.get({ where: { sourceId }, limit, offset, include: [] });
+            if (!docIds.ids || docIds.ids.length == 0) break;
+            await collection.delete({ ids: docIds.ids });
+        }
+
+        const docIds = await collection.get({ where: { sourceId }, limit, offset: 0 });
+        if (docIds.ids?.length > 0) {
+            console.error("Could not delete vectors for source " + sourceId);
+        }
+    }
+
+    async update(sourceId: string, docs: EmbedderDocument[], logger: Logger): Promise<void> {
+        const collection = await this.chroma.getOrCreateCollection({
+            name: sourceId,
+        });
+        logger("Deleting previous vectors for source " + sourceId);
+        await this.delete(collection, sourceId);
+        const ids = docs.flatMap((doc) => doc.segments.map((seg, index) => doc.uri + "|" + index));
+        const embeddings = docs.flatMap((doc) => doc.segments.map((seg) => seg.embedding));
+        const metadatas = docs.flatMap((doc) =>
+            doc.segments.map((seg, index) => {
+                const metadata: VectorMetadata = {
+                    sourceId,
+                    docUri: doc.uri,
+                    docTitle: doc.title,
+                    index,
+                    tokenCount: seg.tokenCount,
+                };
+                return metadata as unknown as Metadata;
+            })
+        );
+        const vectorDocs = docs.flatMap((doc) =>
+            doc.segments.map((seg) => {
+                return seg.text;
+            })
+        );
+        const mergedDocs: (VectorDocument & { vector: number[] })[] = [];
+        for (let i = 0; i < ids.length; i++) {
+            mergedDocs.push({
+                ...(metadatas[i] as unknown as VectorMetadata),
+                vector: embeddings[i],
+                text: vectorDocs[i],
+                distance: 0,
+            });
+        }
+        const stream = fs.createWriteStream(`/data/vectors-${sourceId}.jsonl`, { flags: "w" });
+        mergedDocs.forEach((doc) => {
+            stream.write(JSON.stringify(doc) + "\n");
+        });
+        stream.end();
+        let numProcessed = 0;
+        const total = ids.length;
+        while (ids.length > 0) {
+            const batchSize = 2000;
+            const batchIds = ids.splice(0, batchSize);
+            const batchEmbeddings = embeddings.splice(0, batchSize);
+            const batchMetadatas = metadatas.splice(0, batchSize);
+            const batchDocuments = vectorDocs.splice(0, batchSize);
+            await collection.upsert({
+                ids: batchIds,
+                embeddings: batchEmbeddings,
+                metadatas: batchMetadatas,
+                documents: batchDocuments,
+            });
+            numProcessed += batchIds.length;
+            logger(`Wrote ${numProcessed}/${total} segments to vector collection ${sourceId}`);
+        }
     }
 
     async getDocuments(sourceId: string, offset: number, limit: number) {
@@ -222,23 +312,20 @@ export class VectorStore {
         return vectorDocs;
     }
 
-    async query(
-        sourceId: string,
-        queryVector: number[],
-        k: number = 10,
-        include: ("metadatas" | "documents" | "distances")[] = ["metadatas", "documents", "distances"]
-    ) {
+    async query(sourceId: string, queryVector: number[], k: number = 10) {
+        const start = performance.now();
         const collection = await this.chroma.getCollection({ name: sourceId });
         const queryConfig: any = {
             queryEmbeddings: [queryVector],
             nResults: k,
-            include: include as IncludeEnum[],
+            include: ["metadatas", "documents", "distances"] as IncludeEnum[],
         };
         if (sourceId) {
             queryConfig.where = { sourceId };
         }
         const response = await collection.query(queryConfig);
         const vectorDocs: VectorDocument[] = [];
+        if (response.ids.length == 0) return [];
         for (let i = 0; i < response.ids[0].length; i++) {
             const vectorDoc: VectorDocument = {
                 ...(response.metadatas[0][i] as unknown as VectorMetadata),
@@ -247,6 +334,24 @@ export class VectorStore {
             };
             vectorDocs.push(vectorDoc);
         }
+        console.log("Query took: " + (performance.now() - start) / 1000);
         return vectorDocs;
+    }
+}
+
+export class GannVectorStore implements VectorStore {
+    constructor(public readonly url: string, public readonly embedder: Embedder) {}
+
+    createCollection(sourceId: string): Promise<void> {
+        throw new Error("Method not implemented.");
+    }
+    update(sourceId: string, docs: EmbedderDocument[], logger: Logger): Promise<void> {
+        throw new Error("Method not implemented.");
+    }
+    getDocuments(sourceId: string, offset: number, limit: number): Promise<VectorDocument[]> {
+        throw new Error("Method not implemented.");
+    }
+    query(sourceId: string, queryVector: number[], k: number): Promise<VectorDocument[]> {
+        throw new Error("Method not implemented.");
     }
 }
