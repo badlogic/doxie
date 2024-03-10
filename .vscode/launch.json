@@ -5,6 +5,20 @@
             "type": "java",
             "name": "Benchmark",
             "request": "launch",
+            "mainClass": "com.badlogicgames.jnn.test.Benchmark",
+            "projectName": "jnn"
+        },
+        {
+            "type": "java",
+            "name": "Benchmark",
+            "request": "launch",
+            "mainClass": "com.badlogicgames.jnn.test.Benchmark",
+            "projectName": "gaan"
+        },
+        {
+            "type": "java",
+            "name": "Benchmark",
+            "request": "launch",
             "mainClass": "com.badlogicgames.gann.test.Benchmark",
             "projectName": "gaan"
         },

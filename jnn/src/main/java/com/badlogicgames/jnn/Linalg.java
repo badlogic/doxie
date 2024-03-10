@@ -1,29 +1,19 @@
 package com.badlogicgames.jnn;
 
 public class Linalg {
-    public static void norm(float[] v) {
+    public static float norm(float[] v, int offset, int numDimensions) {
         float sum = 0;
-        for (int i = 0; i < v.length; i++) {
-            sum += v[i] * v[i];
+        for (int i = 0; i < numDimensions; i++) {
+            sum += v[offset + i] * v[offset + i];
         }
         if (sum == 0)
-            return;
+            return 0;
         float length = (float) Math.sqrt(sum);
 
-        for (int i = 0; i < v.length; i++) {
-            v[i] /= length;
+        for (int i = 0; i < numDimensions; i++) {
+            v[offset + i] /= length;
         }
-    }
-
-    public static float dot(float[] a, float[] b) {
-        if (a.length != b.length) {
-            throw new RuntimeException("Vector lengths not equal");
-        }
-        float dot = 0;
-        for (int i = 0; i < a.length; i++) {
-            dot += a[i] * b[i];
-        }
-        return dot;
+        return length;
     }
 
     public static float dot(float[] a, int offset, float[] b) {

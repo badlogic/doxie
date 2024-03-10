@@ -11,111 +11,15 @@ import java.io.FilenameFilter;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.ThreadFactory;
+
+import com.badlogicgames.jnn.engines.NearestNeighbourEngine;
+import com.badlogicgames.jnn.engines.NearestNeighbourEngine.EngineSimilarity;
 
 public class VectorStore {
     public static String FILE_SUFFIX = ".vsb";
-
-    public static class EngineSimilarity {
-        int index;
-        float similarity;
-    }
-
-    public static interface NearestNeighbourEngine {
-        void addVectors(VectorDocument[] document);
-
-        EngineSimilarity[] query(float[] query);
-
-        int numVectors();
-    }
-
-    public static class ExactNearestNeighbourEngine implements NearestNeighbourEngine {
-        int numDimensions;
-        int cpus;
-        float[] vectors;
-        EngineSimilarity[] similarities;
-        ExecutorService executor;
-
-        public ExactNearestNeighbourEngine(int numDimensions, int cpus) {
-            this.numDimensions = numDimensions;
-            this.cpus = cpus;
-            vectors = new float[0];
-            similarities = new EngineSimilarity[0];
-            this.executor = Executors.newFixedThreadPool(cpus, new ThreadFactory() {
-                public Thread newThread(Runnable r) {
-                    Thread t = Executors.defaultThreadFactory().newThread(r);
-                    t.setDaemon(true);
-                    return t;
-                }
-            });
-        }
-
-        @Override
-        public void addVectors(VectorDocument[] documents) {
-            float[] newVectors = new float[vectors.length + documents.length * numDimensions];
-            System.arraycopy(vectors, 0, newVectors, 0, vectors.length);
-            int offset = vectors.length;
-            for (VectorDocument doc : documents) {
-                System.arraycopy(doc.vector, 0, newVectors, offset, numDimensions);
-                offset += numDimensions;
-            }
-            vectors = newVectors;
-
-            var newSimilarities = new EngineSimilarity[numVectors() + documents.length];
-            System.arraycopy(similarities, 0, newSimilarities, 0, similarities.length);
-            for (int i = similarities.length; i < newSimilarities.length; i++) {
-                newSimilarities[i] = new EngineSimilarity();
-            }
-            similarities = newSimilarities;
-        }
-
-        @Override
-        public EngineSimilarity[] query(float[] query) {
-            int totalVectors = numVectors();
-            int chunkSize = (int) Math.ceil(totalVectors / (double) cpus);
-            List<Future<?>> futures = new ArrayList<>();
-
-            for (int i = 0; i < similarities.length; i++) {
-                var similarity = similarities[i];
-                similarity.index = i;
-            }
-
-            for (int i = 0; i < cpus; i++) {
-                final int start = i * chunkSize;
-                final int end = Math.min(start + chunkSize, totalVectors);
-                futures.add(executor.submit((Runnable) () -> {
-                    for (int j = start, offset = start * numDimensions; j < end; j++, offset += numDimensions) {
-                        var similarity = similarities[j];
-                        similarity.similarity = Linalg.dot(vectors, offset, query);
-                    }
-                }));
-            }
-
-            for (Future<?> future : futures) {
-                try {
-                    future.get();
-                } catch (InterruptedException | ExecutionException e) {
-                    throw new RuntimeException(e);
-                }
-            }
-
-            Arrays.sort(similarities, (o1, o2) -> Float.compare(o2.similarity, o1.similarity));
-            return similarities;
-        }
-
-        @Override
-        public int numVectors() {
-            return vectors.length / numDimensions;
-        }
-    }
 
     public static class VectorCollection {
         String id;
@@ -187,11 +91,11 @@ public class VectorStore {
 
     }
 
-    public static class VectorSimilarity {
+    public static class VectorStoreSimilarity {
         public float similarity;
         public VectorDocument doc;
 
-        public VectorSimilarity(float similarity, VectorDocument doc) {
+        public VectorStoreSimilarity(float similarity, VectorDocument doc) {
             this.similarity = similarity;
             this.doc = doc;
         }
@@ -284,14 +188,18 @@ public class VectorStore {
             if (doc.vector.length != collection.numDimensions)
                 throw new RuntimeException("Invalid vector length. Expected: " + collection.numDimensions + ", actual: "
                         + doc.vector.length + ", uri: " + doc.uri + ", index: " + doc.index);
-            Linalg.norm(doc.vector);
+            Linalg.norm(doc.vector, 0, doc.vector.length);
             collection.documents.add(doc);
         }
-        this.engine.addVectors(documents);
+        float[][] vectors = new float[documents.length][];
+        for (int i = 0; i < documents.length; i++) {
+            vectors[i] = documents[i].vector;
+        }
+        this.engine.addVectors(vectors);
         saveDocuments(id, documents);
     }
 
-    public VectorSimilarity[] query(String id, float[] queryVector, int k) {
+    public VectorStoreSimilarity[] query(String id, float[] queryVector, int k) {
         VectorCollection collection = collections.get(id);
         if (collection == null)
             throw new RuntimeException("No collection with id " + id);
@@ -299,11 +207,11 @@ public class VectorStore {
             throw new RuntimeException(
                     "Invalid vector length. Expected: " + collection.numDimensions + ", actual: " + queryVector.length);
 
-        EngineSimilarity[] engineSimilarities = engine.query(queryVector);
-        VectorSimilarity[] similarities = new VectorSimilarity[Math.min(engineSimilarities.length, k)];
+        EngineSimilarity[] engineSimilarities = engine.query(queryVector, k);
+        VectorStoreSimilarity[] similarities = new VectorStoreSimilarity[engineSimilarities.length];
         for (int i = 0; i < similarities.length; i++) {
             var engineSimilarity = engineSimilarities[i];
-            similarities[i] = new VectorSimilarity(engineSimilarity.similarity,
+            similarities[i] = new VectorStoreSimilarity(engineSimilarity.similarity,
                     collection.documents.get(engineSimilarity.index));
         }
         return similarities;

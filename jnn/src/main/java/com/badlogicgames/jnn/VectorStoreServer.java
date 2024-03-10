@@ -1,6 +1,6 @@
 package com.badlogicgames.jnn;
 
-import com.badlogicgames.jnn.VectorStore.NearestNeighbourEngine;
+import com.badlogicgames.jnn.engines.NearestNeighbourEngine;
 
 import io.undertow.Undertow;
 import io.undertow.UndertowOptions;

@@ -5,9 +5,12 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.List;
 
 import com.badlogicgames.jnn.VectorStore;
 import com.badlogicgames.jnn.VectorStore.VectorDocument;
+import com.badlogicgames.jnn.engines.ExactNearestNeighbourEngine;
+import com.badlogicgames.jnn.engines.ExactNearestNeighbourEngine.TopKSelection;
 
 public class Benchmark {
     static float[] randomVector(int numDimensions) {
@@ -34,11 +37,9 @@ public class Benchmark {
         }
     }
 
-    public static void main(String[] args) {
-        var numVectors = 32000;
-        var numDimensions = 1796;
-        var docs = new ArrayList<VectorDocument>(numVectors);
-        for (int i = 0; i < numVectors; i++) {
+    public static List<VectorDocument> randomDocuments(int numDocuments, int numDimensions) {
+        var docs = new ArrayList<VectorDocument>(numDocuments);
+        for (int i = 0; i < numDocuments; i++) {
             var doc = new VectorDocument();
             doc.collectionId = "test";
             doc.uri = "doc-" + i;
@@ -49,9 +50,17 @@ public class Benchmark {
             doc.vector = randomVector(numDimensions);
             docs.add(doc);
         }
+        return docs;
+    }
+
+    public static void main(String[] args) {
+        var numDocuments = 32000;
+        var numDimensions = 1796;
+        var docs = randomDocuments(numDocuments, numDimensions);
 
         try {
-            var store = new VectorStore("tmp", new VectorStore.ExactNearestNeighbourEngine(numDimensions, 8));
+            var engine = new ExactNearestNeighbourEngine(numDimensions, 1, TopKSelection.HEAP_SELECTION);
+            var store = new VectorStore("tmp", engine);
             store.createCollection("test", numDimensions);
             store.addDocuments("test", docs.toArray(new VectorDocument[docs.size()]));
 
@@ -68,6 +77,8 @@ public class Benchmark {
             System.out.println(took + " secs");
             System.out.println(numIterations / took + " queries/sec");
             System.out.println(took / numIterations + " secs/query");
+            System.out.println("Avg. dot: " + (engine.dotTimes / 1e6d) / engine.numQueries + " ms");
+            System.out.println("Avg. sort: " + (engine.selectionTimes / 1e6d) / engine.numQueries + " ms");
         } finally {
             deleteDirectory(new File("tmp"));
         }
