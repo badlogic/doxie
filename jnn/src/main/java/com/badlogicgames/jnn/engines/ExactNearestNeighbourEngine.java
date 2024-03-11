@@ -53,7 +53,7 @@ public class ExactNearestNeighbourEngine implements NearestNeighbourEngine {
         }
         vectors = newVectors;
 
-        var newSimilarities = new EngineSimilarity[numVectors() + inputVectors.length];
+        var newSimilarities = new EngineSimilarity[similarities.length + inputVectors.length];
         System.arraycopy(similarities, 0, newSimilarities, 0, similarities.length);
         for (int i = similarities.length; i < newSimilarities.length; i++) {
             newSimilarities[i] = new EngineSimilarity();

@@ -524,7 +524,7 @@ if (!dbPassword) {
         fs.mkdirSync("docker/data");
     }
 
-    await Promise.all([Rag.waitForChroma(), Database.waitForMongo()]);
+    await Promise.all([Database.waitForMongo()]);
     await Database.jobs!.updateMany({ state: "running" }, { $set: { state: "stopped", finishedAt: Date.now() } });
     const db = new Database();
     const jobs = Database.jobs!;

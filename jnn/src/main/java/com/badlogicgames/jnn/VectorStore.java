@@ -11,6 +11,7 @@ import java.io.FilenameFilter;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -42,6 +43,21 @@ public class VectorStore {
         }
     }
 
+    public static class VectorCollectionInfo {
+        public String id;
+        public int numDimensions;
+        public int numDocuments;
+
+        public VectorCollectionInfo() {
+        }
+
+        public VectorCollectionInfo(String id, int numDimensions, int numDocuments) {
+            this.id = id;
+            this.numDimensions = numDimensions;
+            this.numDocuments = numDocuments;
+        }
+    }
+
     public static class VectorDocument {
         public String uri;
         public int index;
@@ -49,7 +65,6 @@ public class VectorStore {
         public String text;
         public int tokenCount;
         public float[] vector;
-        public float distance;
 
         public static void writeString(String str, DataOutputStream out) throws IOException {
             var bytes = str.getBytes(StandardCharsets.UTF_8);
@@ -133,11 +148,17 @@ public class VectorStore {
                     var numDimensions = docs.get(0).vector.length;
                     var collection = new VectorCollection(id, numDimensions, engineProvider.provide(numDimensions));
                     collection.documents = docs;
+                    float[][] vectors = new float[docs.size()][];
+                    for (int i = 0; i < docs.size(); i++) {
+                        vectors[i] = docs.get(i).vector;
+                    }
+                    collection.engine.addVectors(vectors);
                     collections.put(id, collection);
                 } catch (Throwable t) {
                     System.err.println("Could not load file for collection " + id);
                 }
             }
+            System.out.println("Loading complete");
         } else {
             if (!dataDir.mkdirs())
                 throw new RuntimeException("Could not create output directory " + dataDir.getAbsolutePath());
@@ -191,6 +212,15 @@ public class VectorStore {
         }
     }
 
+    public synchronized List<VectorCollectionInfo> getCollections() {
+        var result = new ArrayList<VectorCollectionInfo>();
+        for (var key : this.collections.keySet()) {
+            var collection = this.collections.get(key);
+            result.add(new VectorCollectionInfo(key, collection.numDimensions, collection.documents.size()));
+        }
+        return result;
+    }
+
     public synchronized void addDocuments(String id, VectorDocument[] documents) {
         if (documents.length == 0)
             return;
@@ -214,6 +244,21 @@ public class VectorStore {
         }
         collection.engine.addVectors(vectors);
         saveDocuments(id, documents);
+    }
+
+    public List<VectorDocument> getDocuments(String id, int offset, int limit) {
+        VectorCollection collection = collections.get(id);
+        if (collection == null)
+            throw new RuntimeException("No collection with id " + id);
+
+        List<VectorDocument> docs = collection.documents;
+        if (offset < 0 || offset >= docs.size())
+            return Collections.EMPTY_LIST;
+
+        int endIndex = Math.min(offset + limit, docs.size());
+        List<VectorDocument> sublist = docs.subList(offset, endIndex);
+
+        return sublist;
     }
 
     public VectorStoreSimilarity[] query(String id, float[] queryVector, int k) {

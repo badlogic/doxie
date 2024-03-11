@@ -392,6 +392,9 @@ export class JnnVectorStore implements VectorStore {
             });
         }
 
+        await this.deleteCollection(sourceId);
+        await this.createCollection(sourceId);
+
         let numProcessed = 0;
         const total = mergedDocs.length;
         while (mergedDocs.length > 0) {
@@ -419,10 +422,51 @@ export class JnnVectorStore implements VectorStore {
     }
 
     async getDocuments(sourceId: string, offset: number, limit: number): Promise<VectorDocument[]> {
-        return [];
+        const params = new URLSearchParams();
+        params.append("id", sourceId);
+        params.append("offset", offset.toString());
+        params.append("limit", limit.toString());
+        const response = await fetch(this.url + "/get?" + params.toString());
+        if (!response.ok) throw new Error("Could not get documents for collection " + sourceId);
+        const result = await response.json();
+        const docs: VectorDocument[] = [];
+        for (const doc of result) {
+            docs.push({
+                sourceId: sourceId,
+                docUri: doc.uri,
+                index: doc.index,
+                docTitle: doc.title,
+                text: doc.text,
+                tokenCount: doc.tokenCount,
+                distance: doc.distance,
+            });
+        }
+        return docs;
     }
 
     async query(sourceId: string, queryVector: number[], k: number): Promise<VectorDocument[]> {
-        return [];
+        const response = await fetch(this.url + "/query", {
+            method: "POST",
+            body: JSON.stringify({
+                id: sourceId,
+                queryVector,
+                k,
+            }),
+        });
+        if (!response.ok) throw new Error("Could not query documents of collection " + sourceId);
+        const result = await response.json();
+        const docs: VectorDocument[] = [];
+        for (const doc of result) {
+            docs.push({
+                sourceId: sourceId,
+                docUri: doc.uri,
+                index: doc.index,
+                docTitle: doc.title,
+                text: doc.text,
+                tokenCount: doc.tokenCount,
+                distance: 1 - doc.distance, // convert to "cosine distance", in range 0 (closest) to 2 (furtherst)
+            });
+        }
+        return docs;
     }
 }

@@ -40,22 +40,20 @@ compile_and_run() {
 compile_and_run
 
 # Poor man's file system polling
-if [ ! -z "$DEV" ]; then
-    last_check_time=$(date +%s)
-    while true; do
-        current_check_time=$(date +%s)
-        newest_mod_time=$(find src/ -type f -exec stat --format="%Y" {} + | sort -n | tail -1)
-        pom_mod_time=$(stat --format="%Y" pom.xml)
+last_check_time=$(date +%s)
+while true; do
+    current_check_time=$(date +%s)
+    newest_mod_time=$(find src/ -type f -exec stat --format="%Y" {} + | sort -n | tail -1)
+    pom_mod_time=$(stat --format="%Y" pom.xml)
 
-        if [[ $pom_mod_time -gt $newest_mod_time ]]; then
-            newest_mod_time=$pom_mod_time
-        fi
+    if [[ $pom_mod_time -gt $newest_mod_time ]]; then
+        newest_mod_time=$pom_mod_time
+    fi
 
-        if [[ $newest_mod_time -gt $last_check_time ]]; then
-            compile_and_run
-            last_check_time=$newest_mod_time
-        fi
-        sleep 1
-    done
-fi
+    if [[ $newest_mod_time -gt $last_check_time ]]; then
+        compile_and_run
+        last_check_time=$newest_mod_time
+    fi
+    sleep 1
+done
 popd

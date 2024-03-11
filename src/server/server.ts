@@ -11,7 +11,7 @@ import WebSocket, { WebSocketServer } from "ws";
 import { Bot, ProcessingJob, Source, VectorDocument } from "../common/api";
 import { ErrorReason } from "../common/errors";
 import { ChatSessions } from "./chatsessions";
-import { Database, ChromaVectorStore, VectorStore } from "./database";
+import { Database, ChromaVectorStore, VectorStore, JnnVectorStore } from "./database";
 import { Embedder } from "./embedder";
 import { Rag } from "./rag";
 import { Jobs } from "./jobs";
@@ -55,11 +55,11 @@ function logError(endpoint: string, message: string, e: any) {
         fs.mkdirSync("html/files");
     }
 
-    await Promise.all([Rag.waitForChroma(), Database.waitForMongo()]);
+    await Promise.all([Database.waitForMongo()]);
     const embedder = new Embedder(openaiKey, async (message: string) => console.log(message));
     const rag = new Rag(embedder);
     const database = new Database();
-    const vectors = new ChromaVectorStore(openaiKey);
+    const vectors = new JnnVectorStore("http://jnn:3335", embedder);
     const sessions = new ChatSessions(openaiKey, database, vectors, cohereKey);
     const jobs = new Jobs(database);
 

@@ -1,11 +1,16 @@
 package com.badlogicgames.jnn;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 import com.badlogicgames.jnn.VectorStore.NearestNeighbourEngineProvider;
 import com.badlogicgames.jnn.VectorStore.VectorDocument;
+import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializerProvider;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.fasterxml.jackson.databind.ser.std.StdSerializer;
 
 import io.undertow.Undertow;
 import io.undertow.UndertowOptions;
@@ -15,9 +20,34 @@ import io.undertow.util.Headers;
 import io.undertow.util.StatusCodes;
 
 public class VectorStoreServer {
+
+    public static class OutputVectorDocument {
+        public String uri;
+        public int index;
+        public String title;
+        public String text;
+        public int tokenCount;
+        public float distance;
+
+        public OutputVectorDocument(VectorDocument doc, float distance) {
+            this.uri = doc.uri;
+            this.index = doc.index;
+            this.title = doc.title;
+            this.text = doc.text;
+            this.tokenCount = doc.tokenCount;
+            this.distance = distance;
+        }
+    }
+
     public static class AddRequest {
         public String id;
         public VectorDocument[] docs;
+    }
+
+    public static class QueryRequest {
+        public String id;
+        public float[] queryVector;
+        public int k;
     }
 
     class Requests implements HttpHandler {
@@ -44,6 +74,16 @@ public class VectorStoreServer {
                         handleAdd(exchange);
                     }
                     break;
+                case "/get":
+                    if (exchange.getRequestMethod().equalToString("GET")) {
+                        handleGet(exchange);
+                    }
+                    break;
+                case "/collections":
+                    if (exchange.getRequestMethod().equalToString("GET")) {
+                        handleGetCollections(exchange);
+                    }
+                    break;
                 case "/query":
                     if (exchange.getRequestMethod().equalToString("POST")) {
                         handleQuery(exchange);
@@ -61,9 +101,10 @@ public class VectorStoreServer {
 
         private void handleCreate(HttpServerExchange exchange) {
             exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json");
-            String id = exchange.getQueryParameters().get("id").getFirst(); // Assuming 'id' is the query parameter name
 
             try {
+                String id = exchange.getQueryParameters().get("id").getFirst(); // Assuming 'id' is the query parameter
+                                                                                // name
                 store.createCollection(id); // Assuming this method call is correct
                 exchange.setStatusCode(StatusCodes.OK);
                 exchange.getResponseSender().send("{\"message\": \"OK\"}");
@@ -98,10 +139,10 @@ public class VectorStoreServer {
 
         private void handleDelete(HttpServerExchange exchange) {
             exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json");
-            String id = exchange.getQueryParameters().get("id").getFirst(); // Assuming 'id' is the query parameter name
 
             try {
-                store.deleteCollection(id); // Assuming this method call is correct
+                String id = exchange.getQueryParameters().get("id").getFirst();
+                store.deleteCollection(id);
                 exchange.setStatusCode(StatusCodes.OK);
                 exchange.getResponseSender().send("{\"message\": \"OK\"}");
             } catch (Exception e) {
@@ -111,7 +152,69 @@ public class VectorStoreServer {
             }
         }
 
+        private void handleGet(HttpServerExchange exchange) {
+            exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json");
+            try {
+                String id = exchange.getQueryParameters().get("id").getFirst();
+                int offset = Integer.parseInt(exchange.getQueryParameters().get("offset").getFirst());
+                int limit = Integer.parseInt(exchange.getQueryParameters().get("limit").getFirst());
+                var result = store.getDocuments(id, offset, limit); // Assuming this method call is correct
+                ObjectMapper objectMapper = new ObjectMapper();
+                var resultList = new ArrayList<OutputVectorDocument>(result.size());
+                for (var doc : result) {
+                    resultList.add(new OutputVectorDocument(doc, 0));
+                }
+                String json = objectMapper.writeValueAsString(resultList);
+                exchange.setStatusCode(StatusCodes.OK);
+                exchange.getResponseSender().send(json);
+            } catch (Exception e) {
+                e.printStackTrace();
+                exchange.setStatusCode(StatusCodes.INTERNAL_SERVER_ERROR);
+                exchange.getResponseSender().send("{\"message\": \"Error getting documents from collection\"}");
+            }
+        }
+
+        private void handleGetCollections(HttpServerExchange exchange) {
+            exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json");
+            try {
+                ObjectMapper objectMapper = new ObjectMapper();
+                String json = objectMapper.writeValueAsString(store.getCollections());
+                exchange.setStatusCode(StatusCodes.OK);
+                exchange.getResponseSender().send(json);
+            } catch (Exception e) {
+                e.printStackTrace();
+                exchange.setStatusCode(StatusCodes.INTERNAL_SERVER_ERROR);
+                exchange.getResponseSender().send("{\"message\": \"Error getting documents from collection\"}");
+            }
+        }
+
         private void handleQuery(HttpServerExchange exchange) {
+            exchange.getRequestReceiver().receiveFullString((exchange1, message) -> {
+                long start = System.nanoTime();
+                exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "application/json");
+                try {
+                    ObjectMapper objectMapper = new ObjectMapper();
+                    QueryRequest queryRequest = objectMapper.readValue(message, QueryRequest.class);
+
+                    var topK = store.query(queryRequest.id, queryRequest.queryVector, queryRequest.k);
+                    var resultList = new ArrayList<OutputVectorDocument>(topK.length);
+                    for (var doc : topK) {
+                        resultList.add(new OutputVectorDocument(doc.doc, doc.similarity));
+                    }
+                    String json = objectMapper.writeValueAsString(resultList);
+                    exchange.setStatusCode(StatusCodes.OK);
+                    exchange.getResponseSender().send(json);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                    exchange1.setStatusCode(StatusCodes.BAD_REQUEST);
+                    exchange1.getResponseSender().send("{\"message\": \"Invalid request body\"}");
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    exchange1.setStatusCode(StatusCodes.INTERNAL_SERVER_ERROR);
+                    exchange1.getResponseSender().send("{\"message\": \"" + e.getMessage() + "\"}");
+                }
+                System.out.println("Query took: " + (System.nanoTime() - start) / 1e6d + " ms");
+            });
         }
     }
 
@@ -127,9 +230,9 @@ public class VectorStoreServer {
         builder.setDirectBuffers(true);
         builder.setBufferSize(1024 * 1024 * 2);
         builder.setServerOption(UndertowOptions.MAX_HEADER_SIZE, 3 * 1024);
-        builder.setServerOption(UndertowOptions.MAX_ENTITY_SIZE, 1024 * 1024 * 2l);
-        builder.setServerOption(UndertowOptions.MULTIPART_MAX_ENTITY_SIZE, 1024 * 1024 * 10l);
-        builder.setServerOption(UndertowOptions.MAX_PARAMETERS, 1);
+        builder.setServerOption(UndertowOptions.MAX_ENTITY_SIZE, 1024 * 1024 * 200l);
+        builder.setServerOption(UndertowOptions.MULTIPART_MAX_ENTITY_SIZE, 1024 * 1024 * 200l);
+        builder.setServerOption(UndertowOptions.MAX_PARAMETERS, 5);
         builder.setServerOption(UndertowOptions.MAX_HEADERS, 20);
         builder.setServerOption(UndertowOptions.MAX_COOKIES, 0);
         builder.setServerOption(UndertowOptions.DECODE_URL, false);
