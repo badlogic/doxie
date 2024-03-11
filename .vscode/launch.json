@@ -3,24 +3,10 @@
     "configurations": [
         {
             "type": "java",
-            "name": "Benchmark",
-            "request": "launch",
-            "mainClass": "com.badlogicgames.jnn.test.Benchmark",
-            "projectName": "jnn"
-        },
-        {
-            "type": "java",
-            "name": "Benchmark",
-            "request": "launch",
-            "mainClass": "com.badlogicgames.jnn.test.Benchmark",
-            "projectName": "gaan"
-        },
-        {
-            "type": "java",
-            "name": "Benchmark",
-            "request": "launch",
-            "mainClass": "com.badlogicgames.gann.test.Benchmark",
-            "projectName": "gaan"
+            "name": "jnn-server",
+            "request": "attach",
+            "hostName": "localhost",
+            "port": "12564"
         },
         {
             "name": "server",
@@ -55,7 +41,7 @@
     "compounds": [
         {
             "name": "dev",
-            "configurations": ["server", "processor", "client"]
+            "configurations": ["server", "jnn-server", "processor", "client"]
         }
     ]
 }

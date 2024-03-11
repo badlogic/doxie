@@ -21,25 +21,35 @@ import com.badlogicgames.jnn.engines.NearestNeighbourEngine.EngineSimilarity;
 public class VectorStore {
     public static String FILE_SUFFIX = ".vsb";
 
+    public static interface NearestNeighbourEngineProvider {
+        NearestNeighbourEngine provide(int numDimensions);
+    }
+
     public static class VectorCollection {
         String id;
         int numDimensions;
         List<VectorDocument> documents = new ArrayList<>();
+        NearestNeighbourEngine engine;
 
-        public VectorCollection(String id, int numDimensions) {
+        public VectorCollection(String id) {
+            this(id, 0, null);
+        }
+
+        public VectorCollection(String id, int numDimensions, NearestNeighbourEngine engine) {
             this.id = id;
             this.numDimensions = numDimensions;
+            this.engine = engine;
         }
     }
 
     public static class VectorDocument {
-        public String collectionId;
         public String uri;
         public int index;
         public String title;
         public String text;
         public int tokenCount;
         public float[] vector;
+        public float distance;
 
         public static void writeString(String str, DataOutputStream out) throws IOException {
             var bytes = str.getBytes(StandardCharsets.UTF_8);
@@ -103,11 +113,11 @@ public class VectorStore {
 
     Map<String, VectorCollection> collections = new HashMap<>();
     File dataDir;
-    NearestNeighbourEngine engine;
+    NearestNeighbourEngineProvider engineProvider;
 
-    public VectorStore(String dataDirPath, NearestNeighbourEngine engine) {
+    public VectorStore(String dataDirPath, NearestNeighbourEngineProvider engineProvider) {
         this.dataDir = new File(dataDirPath);
-        this.engine = engine;
+        this.engineProvider = engineProvider;
         if (dataDir.exists()) {
             var files = dataDir.listFiles(new FilenameFilter() {
                 @Override
@@ -120,7 +130,8 @@ public class VectorStore {
                 System.out.println("Loading collection " + id);
                 try {
                     var docs = loadDocuments(id);
-                    var collection = new VectorCollection(id, docs.get(0).vector.length);
+                    var numDimensions = docs.get(0).vector.length;
+                    var collection = new VectorCollection(id, numDimensions, engineProvider.provide(numDimensions));
                     collection.documents = docs;
                     collections.put(id, collection);
                 } catch (Throwable t) {
@@ -130,21 +141,6 @@ public class VectorStore {
         } else {
             if (!dataDir.mkdirs())
                 throw new RuntimeException("Could not create output directory " + dataDir.getAbsolutePath());
-        }
-    }
-
-    public synchronized void createCollection(String id, int numDimensions) {
-        if (collections.containsKey(id))
-            return;
-        collections.put(id, new VectorCollection(id, numDimensions));
-    }
-
-    public synchronized void deleteCollection(String id) {
-        if (collections.containsKey(id)) {
-            collections.remove(id);
-            var file = new File(dataDir, id + FILE_SUFFIX);
-            if (!file.delete())
-                throw new RuntimeException("Could not delete collection file " + file.getAbsolutePath());
         }
     }
 
@@ -178,12 +174,33 @@ public class VectorStore {
         return documents;
     }
 
+    public synchronized void createCollection(String id) {
+        if (collections.containsKey(id))
+            return;
+        collections.put(id, new VectorCollection(id));
+    }
+
+    public synchronized void deleteCollection(String id) {
+        if (collections.containsKey(id)) {
+            collections.remove(id);
+            var file = new File(dataDir, id + FILE_SUFFIX);
+            if (file.exists()) {
+                if (!file.delete())
+                    throw new RuntimeException("Could not delete collection file " + file.getAbsolutePath());
+            }
+        }
+    }
+
     public synchronized void addDocuments(String id, VectorDocument[] documents) {
         if (documents.length == 0)
             return;
         VectorCollection collection = collections.get(id);
         if (collection == null)
             throw new RuntimeException("No collection with id " + id);
+        if (collection.numDimensions == 0) {
+            collection.numDimensions = documents[0].vector.length;
+            collection.engine = engineProvider.provide(collection.numDimensions);
+        }
         for (VectorDocument doc : documents) {
             if (doc.vector.length != collection.numDimensions)
                 throw new RuntimeException("Invalid vector length. Expected: " + collection.numDimensions + ", actual: "
@@ -195,7 +212,7 @@ public class VectorStore {
         for (int i = 0; i < documents.length; i++) {
             vectors[i] = documents[i].vector;
         }
-        this.engine.addVectors(vectors);
+        collection.engine.addVectors(vectors);
         saveDocuments(id, documents);
     }
 
@@ -207,7 +224,7 @@ public class VectorStore {
             throw new RuntimeException(
                     "Invalid vector length. Expected: " + collection.numDimensions + ", actual: " + queryVector.length);
 
-        EngineSimilarity[] engineSimilarities = engine.query(queryVector, k);
+        EngineSimilarity[] engineSimilarities = collection.engine.query(queryVector, k);
         VectorStoreSimilarity[] similarities = new VectorStoreSimilarity[engineSimilarities.length];
         for (int i = 0; i < similarities.length; i++) {
             var engineSimilarity = engineSimilarities[i];

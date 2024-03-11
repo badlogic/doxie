@@ -1,5 +1,5 @@
 import * as fs from "fs";
-import { Database, ChromaVectorStore, VectorStore } from "./database";
+import { Database, ChromaVectorStore, VectorStore, JnnVectorStore } from "./database";
 import { Rag } from "./rag";
 import {
     BaseSource,
@@ -405,7 +405,8 @@ class Processor {
 
     constructor(private jobs: MongoCollection<Document>, readonly database: Database, readonly openaiKey: string) {
         this.embedder = new Embedder(openaiKey, async (message: string) => console.log(message));
-        this.vectors = new ChromaVectorStore(openaiKey);
+        // this.vectors = new ChromaVectorStore(openaiKey);
+        this.vectors = new JnnVectorStore("http://jnn:3335/", this.embedder);
     }
 
     async getNextJob(): Promise<ProcessingJob | undefined> {
@@ -474,7 +475,8 @@ class Processor {
                             default:
                                 assertNever(source);
                         }
-
+                        console.log("Vectorizing ");
+                        this.vectors.createCollection(source._id!);
                         this.vectors.update(source._id!, docs, logger);
 
                         await this.finishJob(job._id!, true);
@@ -487,8 +489,8 @@ class Processor {
                         }
                         try {
                             await this.log(job, message);
+                            await this.finishJob(job._id!, false);
                         } catch (e) {}
-                        await this.finishJob(job._id!, false);
                     }
                 }
             } catch (e) {

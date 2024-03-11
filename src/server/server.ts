@@ -220,6 +220,7 @@ function logError(endpoint: string, message: string, e: any) {
                 if (token != adminToken) throw new Error("Invalid admin token");
                 const id = req.params.id as string;
                 await database.deleteSource(id);
+                await vectors.deleteCollection(id);
                 apiSuccess(res);
             } catch (e) {
                 const error = "Could not delete source " + req.query.id;

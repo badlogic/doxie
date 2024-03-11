@@ -3,6 +3,7 @@ import * as fs from "fs";
 import { Document, MongoClient, Collection as MongoCollection, ObjectId } from "mongodb";
 import { Bot, ChatSession, EmbedderDocument, Logger, ProcessingJob, Source, VectorDocument, VectorMetadata } from "../common/api";
 import { Embedder } from "./embedder";
+import { merge } from "cheerio/lib/static";
 
 export class Database {
     static client?: MongoClient;
@@ -207,6 +208,7 @@ export class Database {
 export interface VectorStore {
     embedder: Embedder;
     createCollection(sourceId: string): Promise<void>;
+    deleteCollection(sourceId: string): Promise<void>;
     update(sourceId: string, docs: EmbedderDocument[], logger: Logger): Promise<void>;
     getDocuments(sourceId: string, offset: number, limit: number): Promise<VectorDocument[]>;
     query(sourceId: string, queryVector: number[], k: number): Promise<VectorDocument[]>;
@@ -222,9 +224,15 @@ export class ChromaVectorStore implements VectorStore {
     }
 
     async createCollection(sourceId: string) {
-        const collection = await this.chroma.getOrCreateCollection({
+        await this.chroma.getOrCreateCollection({
             name: sourceId,
             embeddingFunction: { generate: (texts) => this.embedder.embed(texts) },
+        });
+    }
+
+    async deleteCollection(sourceId: string) {
+        await this.chroma.deleteCollection({
+            name: sourceId,
         });
     }
 
@@ -339,19 +347,82 @@ export class ChromaVectorStore implements VectorStore {
     }
 }
 
-export class GannVectorStore implements VectorStore {
-    constructor(public readonly url: string, public readonly embedder: Embedder) {}
+export class JnnVectorStore implements VectorStore {
+    constructor(public url: string, public readonly embedder: Embedder) {
+        if (url.endsWith("/")) this.url = url.substring(0, url.length - 1);
+    }
 
-    createCollection(sourceId: string): Promise<void> {
-        throw new Error("Method not implemented.");
+    async createCollection(sourceId: string): Promise<void> {
+        const response = await fetch(this.url + "/create?id=" + encodeURIComponent(sourceId));
+        if (!response.ok) throw new Error("Could not create collection");
     }
-    update(sourceId: string, docs: EmbedderDocument[], logger: Logger): Promise<void> {
-        throw new Error("Method not implemented.");
+
+    async deleteCollection(sourceId: string): Promise<void> {
+        const response = await fetch(this.url + "/delete?id=" + encodeURIComponent(sourceId));
+        if (!response.ok) throw new Error("Could not create collection");
     }
-    getDocuments(sourceId: string, offset: number, limit: number): Promise<VectorDocument[]> {
-        throw new Error("Method not implemented.");
+
+    async update(sourceId: string, docs: EmbedderDocument[], logger: Logger): Promise<void> {
+        const ids = docs.flatMap((doc) => doc.segments.map((seg, index) => doc.uri + "|" + index));
+        const embeddings = docs.flatMap((doc) => doc.segments.map((seg) => seg.embedding));
+        const metadatas = docs.flatMap((doc) =>
+            doc.segments.map((seg, index) => {
+                const metadata: VectorMetadata = {
+                    sourceId,
+                    docUri: doc.uri,
+                    docTitle: doc.title,
+                    index,
+                    tokenCount: seg.tokenCount,
+                };
+                return metadata as unknown as Metadata;
+            })
+        );
+        const vectorDocs = docs.flatMap((doc) =>
+            doc.segments.map((seg) => {
+                return seg.text;
+            })
+        );
+        const mergedDocs: (VectorDocument & { vector: number[] })[] = [];
+        for (let i = 0; i < ids.length; i++) {
+            mergedDocs.push({
+                ...(metadatas[i] as unknown as VectorMetadata),
+                vector: embeddings[i],
+                text: vectorDocs[i],
+                distance: 0,
+            });
+        }
+
+        let numProcessed = 0;
+        const total = mergedDocs.length;
+        while (mergedDocs.length > 0) {
+            const batch = mergedDocs.splice(0, 1000);
+            const response = await fetch(this.url + "/add", {
+                method: "POST",
+                body: JSON.stringify({
+                    id: sourceId,
+                    docs: batch.map((doc) => {
+                        return {
+                            uri: doc.docUri,
+                            index: doc.index,
+                            title: doc.docTitle,
+                            text: doc.text,
+                            tokenCount: doc.tokenCount,
+                            vector: doc.vector,
+                        };
+                    }),
+                }),
+            });
+            if (!response.ok) throw new Error("Could not add documents to collection " + sourceId);
+            numProcessed += batch.length;
+            logger(`Wrote ${numProcessed}/${total} segments to vector collection ${sourceId}`);
+        }
     }
-    query(sourceId: string, queryVector: number[], k: number): Promise<VectorDocument[]> {
-        throw new Error("Method not implemented.");
+
+    async getDocuments(sourceId: string, offset: number, limit: number): Promise<VectorDocument[]> {
+        return [];
+    }
+
+    async query(sourceId: string, queryVector: number[], k: number): Promise<VectorDocument[]> {
+        return [];
     }
 }

@@ -1,0 +1,12 @@
+FROM eclipse-temurin:17
+
+WORKDIR /app
+
+RUN apt-get update && \
+    apt-get install -y fswatch maven inotify-tools && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY pom.xml .
+RUN mvn dependency:copy-dependencies -DoutputDirectory=libs
+
+CMD ["./server.sh"]

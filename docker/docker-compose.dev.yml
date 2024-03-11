@@ -15,6 +15,12 @@ services:
             - 3334:3334
         environment:
             - DEV=true
+    jnn:
+        ports:
+            - 3335:3335
+            - 12564:12564
+        environment:
+            - DEV=true
     mongodb:
         ports:
             - 27017:27017

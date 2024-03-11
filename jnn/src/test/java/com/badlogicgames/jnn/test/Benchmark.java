@@ -8,6 +8,7 @@ import java.util.Comparator;
 import java.util.List;
 
 import com.badlogicgames.jnn.VectorStore;
+import com.badlogicgames.jnn.VectorStore.NearestNeighbourEngineProvider;
 import com.badlogicgames.jnn.VectorStore.VectorDocument;
 import com.badlogicgames.jnn.engines.ExactNearestNeighbourEngine;
 import com.badlogicgames.jnn.engines.ExactNearestNeighbourEngine.TopKSelection;
@@ -41,7 +42,6 @@ public class Benchmark {
         var docs = new ArrayList<VectorDocument>(numDocuments);
         for (int i = 0; i < numDocuments; i++) {
             var doc = new VectorDocument();
-            doc.collectionId = "test";
             doc.uri = "doc-" + i;
             doc.index = 0;
             doc.title = "title-" + i;
@@ -59,9 +59,13 @@ public class Benchmark {
         var docs = randomDocuments(numDocuments, numDimensions);
 
         try {
-            var engine = new ExactNearestNeighbourEngine(numDimensions, 1, TopKSelection.HEAP_SELECTION);
-            var store = new VectorStore("tmp", engine);
-            store.createCollection("test", numDimensions);
+            ExactNearestNeighbourEngine[] engines = new ExactNearestNeighbourEngine[1];
+            NearestNeighbourEngineProvider engineProvider = (numDims) -> {
+                engines[0] = new ExactNearestNeighbourEngine(numDims, 1, TopKSelection.HEAP_SELECTION);
+                return engines[0];
+            };
+            var store = new VectorStore("tmp", engineProvider);
+            store.createCollection("test");
             store.addDocuments("test", docs.toArray(new VectorDocument[docs.size()]));
 
             var queryVector = randomVector(numDimensions);
@@ -77,8 +81,8 @@ public class Benchmark {
             System.out.println(took + " secs");
             System.out.println(numIterations / took + " queries/sec");
             System.out.println(took / numIterations + " secs/query");
-            System.out.println("Avg. dot: " + (engine.dotTimes / 1e6d) / engine.numQueries + " ms");
-            System.out.println("Avg. sort: " + (engine.selectionTimes / 1e6d) / engine.numQueries + " ms");
+            System.out.println("Avg. dot: " + (engines[0].dotTimes / 1e6d) / engines[0].numQueries + " ms");
+            System.out.println("Avg. sort: " + (engines[0].selectionTimes / 1e6d) / engines[0].numQueries + " ms");
         } finally {
             deleteDirectory(new File("tmp"));
         }

@@ -76,6 +76,7 @@
     "build:css": "npx tailwindcss -i html/styles.css -o html/build/styles-bundle.css",
     "build:server": "node ./esbuild.server.mjs",
     "build:site": "node ./esbuild.site.mjs",
+    "build:jnn": "cd jnn && rm -rf libs && mvn dependency:copy-dependencies -DoutputDirectory=libs && mvn clean compile",
     "clean": "rimraf html/build",
     "dev": "concurrently -r \"npx tsc --noEmit --preserveWatchOutput --watch\" \"npm run build:site -- --watch\" \"npm run build:css -- --watch\" \"npm run build:server -- --watch\" \"./docker/control.sh startdev\"",
     "format": "npx prettier --write .",

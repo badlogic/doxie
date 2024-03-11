@@ -31,6 +31,7 @@ services:
         links:
             - chroma
             - mongodb
+            - jnn
         networks:
             - network
 
@@ -47,6 +48,22 @@ services:
         volumes:
             - ./data:/data
             - ../:/app
+        links:
+            - chroma
+            - mongodb
+        networks:
+            - network
+
+    jnn:
+        build:
+            context: .
+            dockerfile: Dockerfile.jnn
+        stop_grace_period: 0s
+        environment:
+            PORT: 3335
+        volumes:
+            - ./data:/data
+            - ../jnn:/app
         links:
             - chroma
             - mongodb
