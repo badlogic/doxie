@@ -213,7 +213,7 @@ public class VectorStoreServer {
                     exchange1.setStatusCode(StatusCodes.INTERNAL_SERVER_ERROR);
                     exchange1.getResponseSender().send("{\"message\": \"" + e.getMessage() + "\"}");
                 }
-                System.out.println("Query took: " + (System.nanoTime() - start) / 1e6d + " ms");
+                // System.out.println("Query took: " + (System.nanoTime() - start) / 1e6d + " ms");
             });
         }
     }
