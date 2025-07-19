@@ -14,3 +14,4 @@ jnn/target
 tmp/test.vsb
 jnn/libs
 .env
+docker/.env

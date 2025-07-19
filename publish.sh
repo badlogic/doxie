@@ -10,8 +10,8 @@ echo "{\"date\": \"$current_date\", \"commit\": \"$commit_hash\"}" > html/versio
 ssh -t $host "mkdir -p $host_dir/docker/data/postgres"
 rsync -avz --exclude node_modules --exclude .git --exclude data --exclude jnn/target --exclude jnn/libs --exclude docker/data ./ $host:$host_dir
 
-# Create .env file on remote server
-ssh $host "cat > $host_dir/.env << 'EOF'
+# Create .env file on remote server in docker directory
+ssh $host "cat > $host_dir/docker/.env << 'EOF'
 DOXIE_OPENAI_KEY=$DOXIE_OPENAI_KEY
 DOXIE_COHERE_KEY=$DOXIE_COHERE_KEY
 DOXIE_ADMIN_TOKEN=$DOXIE_ADMIN_TOKEN
