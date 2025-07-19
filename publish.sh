@@ -10,9 +10,17 @@ echo "{\"date\": \"$current_date\", \"commit\": \"$commit_hash\"}" > html/versio
 ssh -t $host "mkdir -p $host_dir/docker/data/postgres"
 rsync -avz --exclude node_modules --exclude .git --exclude data --exclude jnn/target --exclude jnn/libs --exclude docker/data ./ $host:$host_dir
 
+# Create .env file on remote server
+ssh $host "cat > $host_dir/.env << 'EOF'
+DOXIE_OPENAI_KEY=$DOXIE_OPENAI_KEY
+DOXIE_COHERE_KEY=$DOXIE_COHERE_KEY
+DOXIE_ADMIN_TOKEN=$DOXIE_ADMIN_TOKEN
+DOXIE_DB_PASSWORD=$DOXIE_DB_PASSWORD
+EOF"
+
 if [ "$1" == "server" ]; then
     echo "Publishing client & server"
-    ssh -t $host "export DOXIE_OPENAI_KEY=$DOXIE_OPENAI_KEY && export DOXIE_COHERE_KEY=$DOXIE_COHERE_KEY && export DOXIE_ADMIN_TOKEN=$DOXIE_ADMIN_TOKEN && export DOXIE_DB_PASSWORD=$DOXIE_DB_PASSWORD && cd $host_dir && ./docker/control.sh stop && ./docker/control.sh start && ./docker/control.sh logs"
+    ssh -t $host "cd $host_dir && ./docker/control.sh stop && ./docker/control.sh start && ./docker/control.sh logs"
 else
     echo "Publishing client only"
 fi

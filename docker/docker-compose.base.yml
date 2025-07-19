@@ -19,6 +19,7 @@ services:
             context: .
             dockerfile: Dockerfile.server
         stop_grace_period: 0s
+        env_file: ../.env
         environment:
             PORT: 3333
             DOXIE_OPENAI_KEY: ${DOXIE_OPENAI_KEY}
@@ -40,6 +41,7 @@ services:
             context: .
             dockerfile: Dockerfile.processor
         stop_grace_period: 0s
+        env_file: ../.env
         environment:
             PORT: 3334
             DOXIE_OPENAI_KEY: ${DOXIE_OPENAI_KEY}
@@ -79,6 +81,7 @@ services:
     mongodb:
         image: mongo
         restart: always
+        env_file: ../.env
         volumes:
             - db_data:/data/db
         environment:
