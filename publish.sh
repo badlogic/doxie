@@ -9,7 +9,7 @@ echo "{\"date\": \"$current_date\", \"commit\": \"$commit_hash\"}" > html/versio
 
 ssh -t $host "mkdir -p $host_dir/docker/data/postgres"
 # Create .env file locally in docker directory
-cat > docker/.env << 'EOF'
+cat > docker/.env << EOF
 DOXIE_OPENAI_KEY=$DOXIE_OPENAI_KEY
 DOXIE_COHERE_KEY=$DOXIE_COHERE_KEY
 DOXIE_ADMIN_TOKEN=$DOXIE_ADMIN_TOKEN
