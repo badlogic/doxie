@@ -8,15 +8,15 @@ commit_hash=$(git rev-parse HEAD)
 echo "{\"date\": \"$current_date\", \"commit\": \"$commit_hash\"}" > html/version.json
 
 ssh -t $host "mkdir -p $host_dir/docker/data/postgres"
-rsync -avz --exclude node_modules --exclude .git --exclude data --exclude jnn/target --exclude jnn/libs --exclude docker/data ./ $host:$host_dir
-
-# Create .env file on remote server in docker directory
-ssh $host "cat > $host_dir/docker/.env << 'EOF'
+# Create .env file locally in docker directory
+cat > docker/.env << 'EOF'
 DOXIE_OPENAI_KEY=$DOXIE_OPENAI_KEY
 DOXIE_COHERE_KEY=$DOXIE_COHERE_KEY
 DOXIE_ADMIN_TOKEN=$DOXIE_ADMIN_TOKEN
 DOXIE_DB_PASSWORD=$DOXIE_DB_PASSWORD
-EOF"
+EOF
+
+rsync -avz --exclude node_modules --exclude .git --exclude data --exclude jnn/target --exclude jnn/libs --exclude docker/data ./ $host:$host_dir
 
 if [ "$1" == "server" ]; then
     echo "Publishing client & server"
