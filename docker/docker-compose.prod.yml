@@ -10,4 +10,4 @@ services:
 networks:
     reverse_proxy:
         external:
-            name: nginx-proxy
+            name: caddy-network
