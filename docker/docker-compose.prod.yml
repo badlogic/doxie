@@ -1,11 +1,11 @@
 version: "3"
 services:
     web:
-        environment:
-            VIRTUAL_HOST: doxie.marioslab.io
-            LETSENCRYPT_HOST: doxie.marioslab.io
-            LETSENCRYPT_EMAIL: badlogicgames@gmail.com
+        labels:
+            caddy: doxie.marioslab.io
+            caddy.reverse_proxy: "{{upstreams 80}}"
         networks:
+            - network
             - reverse_proxy
 networks:
     reverse_proxy:
